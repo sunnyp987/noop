@@ -17,6 +17,20 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.67 — Manual workout tracking (Mac + Android)
+
+- **New feature: start/stop a workout yourself** (top Reddit request). A "Start workout" button on the
+  Live screen (shown when a strap is streaming) opens a live card — elapsed clock, current HR, avg,
+  peak, and **strain building in real time** — with an "End workout" button.
+- **Built entirely on existing primitives** (no new storage/analysis): captures the smoothed live `bpm`
+  into a buffer, scores the window via `StrainScorer.strain(hr:maxHR:sex:)`, and saves a `WorkoutRow`
+  (`sport:"Workout"`, `source:"manual"`) via the existing `upsertWorkouts` path — so it appears in the
+  Workouts view automatically. Not a double-count: the day's strain already counts that HR (same live
+  stream the store persists); the row is a per-session annotation.
+- macOS: `AppModel.startWorkout/endWorkout/captureWorkoutSample` (hooked into `ingestHR`) +
+  `LiveView.workoutSection`. Android: the mirror on `AppViewModel` + `LiveScreen`. Single buzz on
+  start, double on save; a too-short session (no HR captured) is discarded quietly.
+
 ## 1.66 — Android: WHOOP 4 unmapped-firmware fallback — the #77 fix
 
 - **Root cause (found via the Goose-PR mining + a cross-platform audit): a real macOS-only fix that
