@@ -539,6 +539,9 @@ class WhoopBleClient(
      *  console/diagnostic output — not banking to flash) from a clean one. Reset at session start. */
     private var decodedChunksThisSession = 0
     private var consoleChunksThisSession = 0
+    /** #126 false-alarm guard: CONSECUTIVE console-only completed syncs, so the "clock has lost sync"
+     *  banner only fires on sustained emptiness, not a single transient empty cycle on a healthy strap. */
+    private val emptySyncTracker = EmptySyncTracker()
     /** Genuine offload frames seen this session — zero at timeout means the strap never answered
      *  the history request at all (5/MG retry trigger, #78 fork). Main-looper only. */
     private var offloadFramesThisSession = 0
@@ -2122,16 +2125,25 @@ class WhoopBleClient(
         // instead of a silent "synced". A caught-up strap (few/no console chunks) doesn't trip this.
         val emptyBanking = reason == "HISTORY_COMPLETE" &&
             decodedChunksThisSession == 0 && consoleChunksThisSession >= 3
+        // #126: only escalate to the clock-lost banner once emptiness is SUSTAINED. A banking cycle (any
+        // decoded records) clears the streak, so a single transient empty cycle on a healthy strap stays
+        // silent. Track on every completed sync so banking cycles reset it.
+        val sustainedEmpty = if (reason == "HISTORY_COMPLETE")
+            emptySyncTracker.recordCompletedSync(
+                bankedSensorRecords = decodedChunksThisSession > 0,
+                consoleOnly = decodedChunksThisSession == 0 && consoleChunksThisSession >= 3,
+            ) else false
         if (emptyBanking) log(
             "Backfill: completed but the strap banked no sensor history (console-only across " +
-                "$consoleChunksThisSession chunks) — strap not saving to flash.",
+                "$consoleChunksThisSession chunks); consecutive empty syncs = " +
+                "${emptySyncTracker.consecutiveEmptySyncs}.",
         )
         _state.value = when (reason) {
             "HISTORY_COMPLETE" -> _state.value.copy(
                 backfilling = false,
                 syncChunksThisSession = ackedChunksThisSession,
                 lastSyncAt = nowSec,
-                lastSyncError = if (emptyBanking)
+                lastSyncError = if (emptyBanking && sustainedEmpty)
                     "Synced, but your strap had no stored history to hand over — only its diagnostic output. This usually means its clock has lost sync, so it isn't saving data to flash. Fully charge it to 100%, then reconnect, and it should start banking again."
                 else null,
             )
