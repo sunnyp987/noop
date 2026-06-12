@@ -185,6 +185,10 @@ class WhoopBleClient(
         /** Cap on the in-app strap-log ring buffer (for the "Share strap log" diagnostics export). */
         private const val LOG_BUFFER_MAX = 2000
 
+        /** Bump whenever a historical layout is added/changed so the reject archive re-decodes once more
+         *  (#151). 2 = the WHOOP 4.0 v25 layout (v1.95). Matches the Swift BLEManager constant. */
+        private const val REJECT_REPLAY_DECODER_VERSION = 2
+
         // MARK: GATT UUIDs (authoritative, from BLEManager.swift / FINDINGS.md).
         //
         // WHOOP 4.0 custom service + its four characteristics. The shared contract also lists a
@@ -458,6 +462,20 @@ class WhoopBleClient(
      * the strap's records, and this archive is the only remaining copy until the layout is mapped.
      */
     private val rawHistoryArchive = RawHistoryArchive(context)
+
+    init {
+        // Retro-decode (#151): when the decoder gains a historical layout (WHOOP 4.0 v25), re-run every
+        // archived undecodable frame through it ONCE and insert whatever now decodes — the only path by
+        // which already-acked, strap-freed history backfills after an update. Version-gated so it runs
+        // once per decoder version; idempotent if it re-runs (offloaded rows dedupe by ts). Mirrors the
+        // Swift BLEManager gate. (This client is a process singleton, so init runs once per process.)
+        ioScope.launch {
+            val rows = rawHistoryArchive.replayIfNeeded(repository, deviceId, REJECT_REPLAY_DECODER_VERSION)
+            if (rows > 0) {
+                log("Backfill: retro-decoded $rows record(s) from the reject archive after a decoder update.")
+            }
+        }
+    }
 
     /** The offload state machine. Ack callback writes HISTORICAL_DATA_RESULT (with response). */
     private val backfiller = Backfiller(
