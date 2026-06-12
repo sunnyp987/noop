@@ -7,7 +7,7 @@ enum AppChangelog {
 
     /// Bump this when you add a release below. The "What's New" sheet shows automatically when the
     /// stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
-    static let currentVersion = "1.96"
+    static let currentVersion = "1.97"
 
     struct Release: Identifiable {
         let version: String
@@ -19,6 +19,14 @@ enum AppChangelog {
 
     /// Newest first.
     static let releases: [Release] = [
+        Release(
+            version: "1.97",
+            title: "Sleep that was stuck in the archive comes back",
+            date: "June 2026",
+            items: [
+                "Recovered (Mac, iOS and Android): if your WHOOP 4.0 synced \"v25\" firmware records *before* v1.95 — when NOOP couldn't read that layout yet — those records were saved to NOOP's on-device archive but left dark, and the strap had already freed them. NOOP now re-runs that archive through the current decoder on update, so your sleep and recovery from those nights backfill. It happens once per decoder upgrade, automatically. (#151)",
+                "Fixed (Mac, iOS and Android): the AI Coach now formats its replies properly — **bold**, bullet/numbered lists and headings render, instead of showing as raw Markdown symbols. (#149)",
+            ]),
         Release(
             version: "1.96",
             title: "iOS is now a direct download — no Mac or Xcode needed",

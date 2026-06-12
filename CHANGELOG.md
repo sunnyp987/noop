@@ -17,6 +17,18 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.97 — Sleep that was stuck in the archive comes back
+
+- **Recovered (Mac, iOS & Android):** if your WHOOP 4.0 synced "v25" firmware records *before* v1.95 —
+  when NOOP couldn't decode that layout yet — those records were saved to NOOP's on-device archive but
+  left dark, and the strap had already freed them. NOOP now **re-runs that archive through the current
+  decoder on update**, so your sleep and recovery from those nights backfill. Once per decoder upgrade,
+  automatically. (#151)
+- **Fixed (Mac, iOS & Android):** the AI Coach now formats its replies — **bold**, bullet/numbered
+  lists and headings render properly instead of showing as raw Markdown symbols. (#149)
+
+---
+
 ## 1.96 — iOS is now a direct download
 
 - **New: iOS is a direct download.** You no longer need a Mac and Xcode — the iOS app ships as an
