@@ -11,7 +11,7 @@ struct NotificationSettingsView: View {
 
     var body: some View {
         ScreenScaffold(title: "Notifications",
-                       subtitle: "Buzz your strap when these apps notify you. Everything runs on this Mac.") {
+                       subtitle: "Buzz your strap when these apps notify you. Everything runs on \(Platform.deviceNounPhrase).") {
             masterCard
             if store.activeCategories.isEmpty {
                 emptyAppsCard
@@ -28,7 +28,7 @@ struct NotificationSettingsView: View {
 
     private var masterCard: some View {
         AlertSection(icon: "bell.badge.fill", title: "Wrist alerts",
-                     blurb: "When on, NOOP taps your wrist for the apps you pick below — so you can leave the Mac and still feel what matters.") {
+                     blurb: "When on, NOOP taps your wrist for the apps you pick below — so you can leave the \(Platform.deviceNoun) and still feel what matters.") {
             VStack(alignment: .leading, spacing: 16) {
                 Toggle(isOn: $store.masterEnabled) {
                     Text("Enable wrist alerts")
@@ -111,7 +111,7 @@ struct NotificationSettingsView: View {
     private var emptyAppsCard: some View {
         AlertSection(icon: "bell.slash",
                      title: "No supported apps found",
-                     blurb: "NOOP looks for known notification apps on this Mac — Mail, Outlook, WhatsApp, Teams, Messages, Slack and similar. Install one and it'll appear here automatically.") {
+                     blurb: "NOOP looks for known notification apps on \(Platform.deviceNounPhrase) — Mail, Outlook, WhatsApp, Teams, Messages, Slack and similar. Install one and it'll appear here automatically.") {
             EmptyView()
         }
     }

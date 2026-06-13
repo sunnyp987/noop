@@ -7,7 +7,7 @@ enum AppChangelog {
 
     /// Bump this when you add a release below. The "What's New" sheet shows automatically when the
     /// stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
-    static let currentVersion = "2.8.5"
+    static let currentVersion = "2.8.6"
 
     struct Release: Identifiable {
         let version: String
@@ -19,6 +19,16 @@ enum AppChangelog {
 
     /// Newest first.
     static let releases: [Release] = [
+        Release(
+            version: "2.8.6",
+            title: "iPhone diagnostics & expectations, clearer labels, a journal fix",
+            date: "June 2026",
+            items: [
+                "New (iPhone): a 'Using NOOP on iPhone' note in Settings sets honest expectations — sideloading, re-signing, unlocking your phone after a reboot so history can sync — and shows how many days until your sideloaded build expires. The strap log you share now also carries the iPhone details (iOS version, lock state, background-refresh, low-power) that make iPhone-only issues quick to diagnose, with a one-tap Diagnostics screen to copy them.",
+                "Fixed: copy that said 'this Mac' now reads correctly on iPhone. Thanks @robin-liquidium (#225).",
+                "Fixed: the journal could show the same prompt (e.g. magnesium) twice after importing — duplicates are now merged, on every platform. Thanks @maddognik (#224).",
+                "Improved (WHOOP 5/MG): the heart rate NOOP derives from the optical sensor on sleeping (sub-60 bpm) stretches no longer risks snapping to ~60 bpm from a recording artifact, while a genuine 60 bpm is preserved. Thanks @ryanbr (#194).",
+            ]),
         Release(
             version: "2.8.5",
             title: "Fixed: iPhone import, and a stuck store now self-heals",

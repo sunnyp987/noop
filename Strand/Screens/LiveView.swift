@@ -732,9 +732,18 @@ struct LiveView: View {
         #else
         let osName = "macOS"
         #endif
-        let header = "NOOP strap log — \(osName)\nApp: \(v)\n\(osName): "
+        var header = "NOOP strap log — \(osName)\nApp: \(v)\n\(osName): "
             + ProcessInfo.processInfo.operatingSystemVersionString + "\n"
-            + String(repeating: "-", count: 40) + "\n"
+        #if os(iOS)
+        // The iOS variables that actually cause iOS issues — device/beta, Data Protection lock state
+        // (#222), background-refresh, low-power, sideload + cert expiry — so a shared log carries them.
+        // Reached only from the Copy/Save button taps, i.e. on the main thread.
+        let diagLines = IOSDiagnostics.capture().summaryLines()
+        if !diagLines.isEmpty {
+            header += diagLines.joined(separator: "\n") + "\n"
+        }
+        #endif
+        header += String(repeating: "-", count: 40) + "\n"
         return header + live.log.joined(separator: "\n")
     }
 

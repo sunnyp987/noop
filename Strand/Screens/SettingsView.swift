@@ -49,13 +49,17 @@ struct SettingsView: View {
     /// "How your scores work" explainer sheet, reachable any time from About.
     @State private var showScoringGuide = false
 
+    /// iOS environment-diagnostics sheet (device, iOS+build, Data Protection, background refresh,
+    /// low-power, sideload + cert expiry). iOS-only; the macOS strap log already carries OS + version.
+    @State private var showDiagnostics = false
+
     /// User-initiated GitHub release check behind the About "Check for updates" button.
     @StateObject private var updateChecker = UpdateChecker()
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         ScreenScaffold(title: "Settings",
-                       subtitle: "Your numbers, your strap, and how NOOP works. All on this Mac.") {
+                       subtitle: "Your numbers, your strap, and how NOOP works. All on \(Platform.deviceNounPhrase).") {
             profileCard
             unitsCard
             strapCard
@@ -74,6 +78,11 @@ struct SettingsView: View {
         .sheet(isPresented: $showScoringGuide) {
             ScoringGuideView(onClose: { showScoringGuide = false })
         }
+        #if os(iOS)
+        .sheet(isPresented: $showDiagnostics) {
+            DiagnosticsSheet(onClose: { showDiagnostics = false })
+        }
+        #endif
     }
 
     // MARK: - Profile
@@ -533,7 +542,7 @@ struct SettingsView: View {
         SettingsSection(
             icon: "externaldrive.fill",
             title: "Backup & restore",
-            blurb: "Move all your NOOP data to another machine. Export saves everything — history, sleeps, workouts, settings — to a single file you can copy across; import replaces this Mac's data with a backup."
+            blurb: "Move all your NOOP data to another machine. Export saves everything — history, sleeps, workouts, settings — to a single file you can copy across; import replaces \(Platform.deviceNounPhrase)'s data with a backup."
         ) {
             VStack(alignment: .leading, spacing: 16) {
                 // Three labelled buttons must share a narrow iPhone row without wrapping mid-word
@@ -585,7 +594,7 @@ struct SettingsView: View {
                         .foregroundStyle(StrandPalette.textTertiary)
                         .font(.system(size: 13))
                         .accessibilityHidden(true)
-                    Text("Importing overwrites everything currently on this Mac. Your old data is kept in a side file just in case. NOOP needs a relaunch for an import to take effect. Export CSV writes a WHOOP-format zip of your days, sleeps, workouts and journal that re-imports into NOOP on Mac or Android — on-device computed rows are marked APPROXIMATE in its Source column; the full backup stays the lossless restore path.")
+                    Text("Importing overwrites everything currently on \(Platform.deviceNounPhrase). Your old data is kept in a side file just in case. NOOP needs a relaunch for an import to take effect. Export CSV writes a WHOOP-format zip of your days, sleeps, workouts and journal that re-imports into NOOP on Mac or Android — on-device computed rows are marked APPROXIMATE in its Source column; the full backup stays the lossless restore path.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -653,7 +662,7 @@ struct SettingsView: View {
             return
         case .exported(let url):
             backupAlertTitle = "Backup exported"
-            backupAlertMessage = "Saved to \(url.lastPathComponent). Copy this file to your other Mac and use Import there to restore everything."
+            backupAlertMessage = "Saved to \(url.lastPathComponent). Copy this file to your other \(Platform.deviceNoun) and use Import there to restore everything."
             showBackupAlert = true
         case .imported:
             backupAlertTitle = "Backup imported"
@@ -718,6 +727,14 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("How your scores work")
+
+                #if os(iOS)
+                // iOS reality & diagnostics — honest expectations for a sideloaded iPhone build, plus a
+                // one-tap environment dump (device, iOS+build, Data Protection, background refresh,
+                // low-power, sideload expiry) for bug reports. iOS-only; macOS doesn't have these gotchas.
+                iosDiagnosticsRow
+                iphoneExpectations
+                #endif
 
                 // Check for updates — a single, user-initiated read of GitHub's public releases API.
                 // No background polling, no auto-update; sends nothing about you, just reads the version.
@@ -849,6 +866,107 @@ struct SettingsView: View {
         .accessibilityElement(children: .combine)
     }
 
+    // MARK: - iOS reality & diagnostics (iOS-only)
+
+    #if os(iOS)
+    /// A tappable row (mirroring "How your scores work") that opens the environment-diagnostics sheet.
+    private var iosDiagnosticsRow: some View {
+        Button {
+            showDiagnostics = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "stethoscope")
+                    .foregroundStyle(StrandPalette.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Diagnostics")
+                        .font(StrandFont.body)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                    Text("Device, iOS build, Data Protection and sideload status — for bug reports.")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Diagnostics")
+    }
+
+    /// Calm, honest "what to expect running NOOP on iPhone" callout — sideloading reality, re-sign
+    /// cadence, the unlock-after-reboot (#222) note, background-BLE limits, and beta-iOS caveat. Surfaces
+    /// the live sideload-cert expiry when we can read it, with a gentle warning under ~3 days.
+    private var iphoneExpectations: some View {
+        let diag = IOSDiagnostics.capture()
+        let expiry = diag.expiryDaysRemaining()
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "iphone.gen3")
+                    .foregroundStyle(StrandPalette.accent)
+                    .accessibilityHidden(true)
+                Text("Using NOOP on iPhone")
+                    .font(StrandFont.subhead.weight(.semibold))
+                    .foregroundStyle(StrandPalette.textPrimary)
+            }
+
+            iphoneExpectationLine("This is a sideloaded build — installed outside the App Store. It needs re-signing periodically: roughly every 7 days on a free Apple ID, about a year on a paid developer account.")
+            iphoneExpectationLine("After your iPhone reboots, unlock it once. Until you do, iOS keeps NOOP's files locked (Data Protection), so new history can't be written or synced.")
+            iphoneExpectationLine("Background Bluetooth has OS limits — iOS may pause NOOP when it's not in the foreground, so keep it open while syncing a fresh strap.")
+            iphoneExpectationLine("On a beta version of iOS, things can break that work on the release build.")
+
+            if let days = expiry {
+                let warning = days <= 3
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: warning ? "exclamationmark.triangle.fill" : "clock.badge.checkmark")
+                        .font(.system(size: 13))
+                        .foregroundStyle(warning ? StrandPalette.statusWarning : StrandPalette.textTertiary)
+                        .accessibilityHidden(true)
+                    Text(expiryMessage(days))
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(warning ? StrandPalette.statusWarning : StrandPalette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(StrandPalette.surfaceInset,
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(StrandPalette.hairline, lineWidth: 1)
+        )
+    }
+
+    private func expiryMessage(_ days: Int) -> String {
+        if days < 0 {
+            return "This sideloaded build expired \(-days) day\(abs(days) == 1 ? "" : "s") ago — re-sign it to keep it running."
+        }
+        return "This sideloaded build expires in \(days) day\(days == 1 ? "" : "s") — re-sign to keep it running."
+    }
+
+    private func iphoneExpectationLine(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 4))
+                .foregroundStyle(StrandPalette.textTertiary)
+                .padding(.top, 6)
+                .accessibilityHidden(true)
+            Text(text)
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    #endif
+
     // MARK: - Shared bits
 
     private var rowDivider: some View {
@@ -888,6 +1006,85 @@ private struct SettingsSection<Content: View>: View {
         }
     }
 }
+
+// MARK: - iOS diagnostics sheet
+
+#if os(iOS)
+/// A read-only environment dump for bug reports: device, iOS+build, Data Protection (#222),
+/// background refresh, low-power, sideload + cert expiry — with a one-tap Copy.
+private struct DiagnosticsSheet: View {
+    let onClose: () -> Void
+
+    /// Captured once at presentation; a snapshot, not a live monitor.
+    private let lines: [String] = IOSDiagnostics.capture().summaryLines()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Diagnostics").font(StrandFont.title2)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                    Text("Attach this to a bug report.").font(StrandFont.caption)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
+                Spacer()
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+            }
+            .padding(20)
+
+            Divider().overlay(StrandPalette.hairline)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    if lines.isEmpty {
+                        Text("No iOS diagnostics available.")
+                            .font(StrandFont.subhead)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                    } else {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(StrandFont.mono(12))
+                                .foregroundStyle(StrandPalette.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(StrandPalette.surfaceInset,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(20)
+            }
+
+            Divider().overlay(StrandPalette.hairline)
+
+            HStack {
+                Spacer()
+                Button {
+                    // UIPasteboard via the shared cross-platform wrapper.
+                    PlatformPasteboard.copy(lines.joined(separator: "\n"))
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                        .frame(minWidth: 120).padding(.vertical, 4)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(StrandPalette.accent)
+                .disabled(lines.isEmpty)
+            }
+            .padding(16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(StrandPalette.surfaceBase)
+    }
+}
+#endif
 
 // MARK: - Two-column form row
 

@@ -71,6 +71,19 @@ class JournalLogTest {
     }
 
     @Test
+    fun importedMagnesiumWithTrailingWhitespaceDoesNotDoublePrompt() {
+        // #224: a WHOOP export leaves a trailing newline / non-breaking space on the cell, so the
+        // imported "Did you take magnesium?\n" must fold onto the starter, NOT add a second row.
+        val cat = mergeJournalCatalog(
+            imported = listOf("Did you take magnesium?\n", "Did you take  magnesium?"),
+            custom = emptyList(),
+        )
+        assertEquals(1, cat.count { normJournalKey(it) == normJournalKey("Did you take magnesium?") })
+        // No net growth — both imported variants dedupe against the starter.
+        assertEquals(STARTER_JOURNAL_QUESTIONS.size, cat.size)
+    }
+
+    @Test
     fun dayKeyTodayAndYesterday() {
         val today = LocalDate.of(2026, 6, 10)
         assertEquals("2026-06-10", journalDayKey(0, today))

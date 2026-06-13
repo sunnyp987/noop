@@ -40,8 +40,19 @@ final class JournalCatalogStore: ObservableObject {
         hiddenQuestions = d.stringArray(forKey: K.hidden) ?? []
     }
 
+    /// Dedup/identity key for a question. Normalises ALL whitespace — leading/trailing AND internal
+    /// runs collapse to a single space (not just ASCII space/tab) — then lowercases. A WHOOP export
+    /// commonly leaves a trailing newline or non-breaking space on a journal cell, which a bare
+    /// `.whitespaces` trim leaves in place: that's what let "Did you take magnesium?\n" (imported)
+    /// sit beside the starter "Did you take magnesium?" as two rows (#224). Collapsing here folds
+    /// them onto one key. The DISPLAYED string is still the original verbatim text — only the match
+    /// key is normalised — so the stored behaviour key (which the effects engine joins on) is intact.
+    /// Kept value-for-value in step with Android `normJournalKey` (JournalLog.kt).
     private nonisolated static func norm(_ s: String) -> String {
-        s.trimmingCharacters(in: .whitespaces).lowercased()
+        s.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .lowercased()
     }
 
     /// imported > starter > custom; case-insensitive dedupe, first casing wins, with `hidden`
@@ -53,8 +64,10 @@ final class JournalCatalogStore: ObservableObject {
         var seen = Set<String>()
         var out: [String] = []
         for q in imported + starterQuestions + custom {
-            let t = q.trimmingCharacters(in: .whitespaces)
-            let key = t.lowercased()
+            // Display text trims surrounding whitespace/newlines; the dedup key normalises ALL
+            // whitespace (see `norm`) so an imported "…magnesium?\n" folds onto the starter (#224).
+            let t = q.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = norm(q)
             if !t.isEmpty, !hiddenSet.contains(key), seen.insert(key).inserted { out.append(t) }
         }
         return out

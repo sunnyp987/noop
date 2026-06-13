@@ -263,7 +263,7 @@ private struct WelcomeStep: View {
                     .font(StrandFont.title2)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .opacity(appear ? 1 : 0)
-                Text("A private window into your recovery, sleep and strain — read straight from your strap, kept only on this Mac.")
+                Text("A private window into your recovery, sleep and strain — read straight from your strap, kept only on \(Platform.deviceNounPhrase).")
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .multilineTextAlignment(.center)
@@ -299,7 +299,7 @@ private struct WhatItDoesStep: View {
         .init(icon: "lock.shield",
               tint: StrandPalette.statusPositive,
               title: "Own your data, offline",
-              body: "Everything lives on this Mac. No account, no sync, no cloud. Your thread is yours alone."),
+              body: "Everything lives on \(Platform.deviceNounPhrase). No account, no sync, no cloud. Your thread is yours alone."),
     ]
 
     var body: some View {
@@ -380,9 +380,46 @@ private struct ExpectationsStep: View {
                     .offset(y: shown ? 0 : 8)
                     .animation(StrandMotion.gentle.delay(Double(index) * 0.08), value: shown)
                 }
+
+                #if os(iOS)
+                // The iPhone-only reality: this is a sideloaded build, so set the re-sign + unlock
+                // expectation up front rather than letting it surprise people later (#222 / cert expiry).
+                expectationRow(
+                    icon: "iphone.gen3",
+                    title: "Installed outside the App Store",
+                    body: "On iPhone this is a sideloaded build. Re-sign it about every 7 days on a free Apple ID (longer on a paid account). After your phone reboots, unlock it once so NOOP can read and sync its data."
+                )
+                .opacity(shown ? 1 : 0)
+                .offset(y: shown ? 0 : 8)
+                .animation(StrandMotion.gentle.delay(Double(AppChangelog.expectations.count) * 0.08), value: shown)
+                #endif
             }
         }
         .onAppear { shown = true }
+    }
+
+    /// One expectation callout, matching the data-driven rows above so the iOS-only addition is visually
+    /// identical to the rest of the list.
+    private func expectationRow(icon: String, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(StrandPalette.accent)
+                .frame(width: 26)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(StrandFont.headline)
+                    .foregroundStyle(StrandPalette.textPrimary)
+                Text(body).font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: 520, alignment: .leading)
+        .background(StrandPalette.surfaceRaised, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(StrandPalette.hairline))
     }
 }
 
@@ -412,7 +449,7 @@ private struct BluetoothStep: View {
                 InfoCard(
                     icon: "lock.fill",
                     tint: StrandPalette.statusPositive,
-                    title: "Nothing leaves your Mac",
+                    title: "Nothing leaves your \(Platform.deviceNoun)",
                     message: "NOOP talks to your strap directly over Bluetooth Low Energy. There's no server in the middle — the connection is local, and so is every reading it pulls in."
                 )
 
@@ -448,7 +485,7 @@ private struct WearStep: View {
                 VStack(spacing: 12) {
                     Checkline(text: "Wear it snug on your wrist or bicep — sensor against skin.")
                     Checkline(text: "Give it a few minutes of charge if the battery is low.")
-                    Checkline(text: "Keep it within about a metre of this Mac.")
+                    Checkline(text: "Keep it within about a metre of \(Platform.deviceNounPhrase).")
                 }
                 .frame(maxWidth: 440)
             }
@@ -576,7 +613,7 @@ private struct ScanStep: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Checkline(text: "It's charged and worn — the sensor needs skin contact to wake.")
                     Checkline(text: "It isn't held by the WHOOP phone app. Only one host at a time — close the app or turn off its Bluetooth.")
-                    Checkline(text: "It's within about a metre of this Mac.")
+                    Checkline(text: "It's within about a metre of \(Platform.deviceNounPhrase).")
                 }
 
                 Button(action: retry) {
@@ -851,7 +888,7 @@ private struct NotificationsStep: View {
     @State private var pulse = false
     var body: some View {
         StepShell(title: "Stay in the loop",
-                  subtitle: "NOOP can tap your wrist when your Mac needs you — no glance at the screen required.") {
+                  subtitle: "NOOP can tap your wrist when your \(Platform.deviceNoun) needs you — no glance at the screen required.") {
             VStack(spacing: 24) {
                 ZStack {
                     Circle()
@@ -872,7 +909,7 @@ private struct NotificationsStep: View {
                     icon: "applewatch.radiowaves.left.and.right",
                     tint: StrandPalette.statusPositive,
                     title: "A buzz, not a banner",
-                    message: "When the Mac apps you choose send a notification, NOOP taps your strap — Slack, Calendar, Messages, whatever matters. Everything stays on this Mac."
+                    message: "When the \(Platform.deviceNoun) apps you choose send a notification, NOOP taps your strap — Slack, Calendar, Messages, whatever matters. Everything stays on \(Platform.deviceNounPhrase)."
                 )
 
                 VStack(spacing: 12) {

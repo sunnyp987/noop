@@ -258,7 +258,7 @@ struct AppleHealthView: View {
         let rows = loaded ? windowedRows : appleRows
         guard let first = rows.first?.day, let last = rows.last?.day,
               let lo = date(first), let hi = date(last) else {
-            return "Steps, heart, sleep, body composition and VO₂ max — read locally on this Mac."
+            return "Steps, heart, sleep, body composition and VO₂ max — read locally on \(Platform.deviceNounPhrase)."
         }
         let loS = Self.spanFormatter.string(from: lo)
         let hiS = Self.spanFormatter.string(from: hi)

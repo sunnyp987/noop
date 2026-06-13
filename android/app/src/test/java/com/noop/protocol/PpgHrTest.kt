@@ -90,4 +90,32 @@ class PpgHrTest {
         // Zero variance → zero energy → no estimate (never a divide-by-zero).
         assertTrue(PpgHr.estimate(flat).isEmpty())
     }
+
+    @Test
+    fun lowHrWithRecordRateArtifactDoesNotSnapTo60() {
+        // A true ~50 bpm pulse PLUS a per-record sawtooth that resets every fs samples — the
+        // record-rate artifact (#194). It autocorrelates at lag = fs (60 bpm) and is discontinuous at
+        // record boundaries; without the boundary-gated notch a sleeping HR would snap to 60. Recover ~50.
+        val f = 50.0 / 60.0
+        val samples = ArrayList<PpgHr.Sample>()
+        for (s in 0 until 10) {
+            for (i in 0 until fs) {
+                val pulse = 1000.0 * sin(2.0 * PI * f * (s * fs + i) / fs)
+                val sawtooth = 25.0 * i // 0..575 within a record, drops at the boundary
+                samples.add(PpgHr.Sample(ts = 1_000_000L + s, value = (pulse + sawtooth).toInt()))
+            }
+        }
+        val est = PpgHr.estimate(samples)
+        assertTrue("a real low-HR pulse under a record-rate artifact must still estimate", est.isNotEmpty())
+        for (e in est) assertTrue("snapped to ${e.bpm} — artifact not removed", e.bpm in 46..54)
+    }
+
+    @Test
+    fun true60BpmIsPreservedNotNotchedAway() {
+        // A clean 60 bpm pulse is also period-fs but flows smoothly across record boundaries — the
+        // boundary gate must NOT treat it as the artifact and erase it.
+        val est = PpgHr.estimate(sine(bpm = 60.0, seconds = 10))
+        assertTrue("true 60 bpm must not be notched away", est.isNotEmpty())
+        for (e in est) assertTrue("bpm ${e.bpm} not near 60", e.bpm in 57..63)
+    }
 }

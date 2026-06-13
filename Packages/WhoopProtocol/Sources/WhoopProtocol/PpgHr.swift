@@ -65,6 +65,37 @@ public enum PpgHr {
         return num / den
     }
 
+    /// Subtract the record-synchronous (period = `fs`) component of `x` — the artifact a per-record DC
+    /// step / phase reset injects. It autocorrelates strongly at lag = fs (= 60 bpm at 24 Hz), so a
+    /// sub-60-bpm sleeper would otherwise SNAP to 60 because fundamental-period preference picks the
+    /// smaller lag (#194, ryanbr).
+    ///
+    /// CRUCIAL: a true ~60-bpm pulse is ALSO period-fs (one cycle per record), so a blind column-mean
+    /// subtraction would erase a real 60 bpm. The discriminator is the record BOUNDARY: an artifact
+    /// (phase reset / DC step) is DISCONTINUOUS there, while a real pulse flows smoothly across it. So
+    /// only de-artifact when the boundary first-difference is much larger than the within-record one;
+    /// otherwise leave the signal untouched. Gated on ≥ 4 records so the comb is well estimated.
+    static func removeRecordRateComponent(_ x: [Double], fs: Int) -> [Double] {
+        let n = x.count
+        guard fs > 1, n >= fs * 4 else { return x }
+        var withinSum = 0.0, withinCount = 0, boundarySum = 0.0, boundaryCount = 0
+        for i in 1..<n {
+            let d = abs(x[i] - x[i - 1])
+            if i % fs == 0 { boundarySum += d; boundaryCount += 1 } else { withinSum += d; withinCount += 1 }
+        }
+        guard withinCount > 0, boundaryCount > 0 else { return x }
+        let within = withinSum / Double(withinCount)
+        let boundary = boundarySum / Double(boundaryCount)
+        // Smooth boundaries → a real pulse, not an artifact → leave it alone (preserves a true 60 bpm).
+        guard within > 0, boundary > within * 3 else { return x }
+        var colSum = [Double](repeating: 0, count: fs)
+        var colCount = [Int](repeating: 0, count: fs)
+        for i in 0..<n { let p = i % fs; colSum[p] += x[i]; colCount[p] += 1 }
+        var colMean = [Double](repeating: 0, count: fs)
+        for p in 0..<fs where colCount[p] > 0 { colMean[p] = colSum[p] / Double(colCount[p]) }
+        return x.enumerated().map { (i, v) in v - colMean[i % fs] }
+    }
+
     /// Estimate (bpm, confidence) from one PPG window via autocorrelation, or nil when the window is
     /// too short or no pulsatile peak clears `minConfidence` (flat/garbage PPG → no fabricated HR).
     public static func estimate(_ samples: [Int],
@@ -73,7 +104,9 @@ public enum PpgHr {
                                 hiBpm: Double = hrHiBpm,
                                 minConf: Double = minConfidence) -> (bpm: Double, conf: Double)? {
         guard samples.count >= fs * 3 else { return nil }   // need >= 3 s to resolve a low HR
-        let x = detrend(samples.map(Double.init))
+        // De-artifact (#194) THEN linear-detrend, so the autocorrelation sees the pulse, not the
+        // record-rate comb that would peg a low HR at 60 bpm.
+        let x = detrend(removeRecordRateComponent(samples.map(Double.init), fs: fs))
         let fsD = Double(fs)
         let loLag = max(2, Int((fsD * 60 / hiBpm).rounded()))
         let hiLag = min(x.count - 2, Int((fsD * 60 / loBpm).rounded()))

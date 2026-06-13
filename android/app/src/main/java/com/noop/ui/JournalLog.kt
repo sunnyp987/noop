@@ -54,6 +54,18 @@ val STARTER_JOURNAL_QUESTIONS: List<String> = listOf(
     "Did you read before bed?",
 )
 
+/** Dedup/identity key for a question. Normalises ALL whitespace — leading/trailing AND internal
+ *  runs collapse to a single space — then lowercases. A WHOOP export commonly leaves a trailing
+ *  newline or non-breaking space on a journal cell; folding it here is what keeps an imported
+ *  "Did you take magnesium?\n" from sitting beside the starter "Did you take magnesium?" as two
+ *  separate rows (#224). The DISPLAYED string stays verbatim — only the match key is normalised —
+ *  so the stored behaviour key the effects engine joins on is untouched.
+ *  Kept value-for-value in step with macOS `JournalCatalogStore.norm` (JournalCatalog.swift). */
+internal fun normJournalKey(s: String): String =
+    // `(?U)` makes \s Unicode-aware so non-breaking space (U+00A0) etc. also split, matching the
+    // Swift `.whitespacesAndNewlines` set value-for-value.
+    s.split(Regex("(?U)\\s+")).filter { it.isNotEmpty() }.joinToString(" ").lowercase()
+
 /** Catalog = imported questions (exact strings → logged days join imported history), then starter
  *  defaults, then user customs. Case-insensitive dedupe, first casing wins, with `hidden` questions
  *  (starter/imported ones the user removed) filtered out. */
@@ -63,12 +75,14 @@ internal fun mergeJournalCatalog(
     hidden: List<String> = emptyList(),
     starter: List<String> = STARTER_JOURNAL_QUESTIONS,
 ): List<String> {
-    val hiddenSet = hidden.map { it.trim().lowercase() }.toHashSet()
+    val hiddenSet = hidden.map { normJournalKey(it) }.toHashSet()
     val out = ArrayList<String>()
     val seen = HashSet<String>()
     for (q in imported + starter + custom) {
+        // Display text trims surrounding whitespace; the dedup key normalises ALL whitespace (see
+        // normJournalKey) so an imported "…magnesium?\n" folds onto the starter (#224).
         val t = q.trim()
-        val key = t.lowercase()
+        val key = normJournalKey(q)
         if (t.isNotEmpty() && key !in hiddenSet && seen.add(key)) out.add(t)
     }
     return out
@@ -146,8 +160,8 @@ fun JournalLogCard(
     onRestoreQuestion: (String) -> Unit = {},
 ) {
     var editing by remember { mutableStateOf(false) }
-    val customKeys = remember(customQuestions) { customQuestions.map { it.trim().lowercase() }.toHashSet() }
-    fun isCustom(q: String) = q.trim().lowercase() in customKeys
+    val customKeys = remember(customQuestions) { customQuestions.map { normJournalKey(it) }.toHashSet() }
+    fun isCustom(q: String) = normJournalKey(q) in customKeys
 
     Column(verticalArrangement = Arrangement.spacedBy(Metrics.gap)) {
         // Header: title/overline on the left, the Today/Yesterday toggle (or Edit/Done) on the right.

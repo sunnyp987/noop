@@ -77,6 +77,38 @@ final class PpgHrTests: XCTestCase {
         XCTAssertFalse(series.contains { $0.ts > 1_780_000_005 && $0.ts < 1_780_000_200 })
     }
 
+    func testLowHrWithRecordRateArtifactDoesNotSnapTo60() {
+        // A true ~50 bpm pulse PLUS a per-record sawtooth that resets every `fs` samples — the
+        // record-rate artifact ryanbr flagged (#194). The sawtooth autocorrelates at lag = fs (60 bpm)
+        // and is DISCONTINUOUS at record boundaries; without the boundary-gated notch the estimator
+        // would snap a sleeping HR to 60. It must recover ~50.
+        let f = 50.0 / 60.0
+        var sig = [Int]()
+        for s in 0..<10 {
+            for i in 0..<fs {
+                let pulse = 1000.0 * sin(2 * Double.pi * f * Double(s * fs + i) / Double(fs))
+                let sawtooth = 25.0 * Double(i)   // 0…575 within a record, drops at the boundary
+                sig.append(Int(pulse + sawtooth))
+            }
+        }
+        let est = PpgHr.estimate(sig)
+        XCTAssertNotNil(est, "a real low-HR pulse under a record-rate artifact must still estimate")
+        if let est {
+            XCTAssertEqual(est.bpm, 50, accuracy: 4.0,
+                           "estimate snapped to \(est.bpm) — the record-rate artifact wasn't removed")
+        }
+    }
+
+    func testTrue60BpmIsPreservedNotNotchedAway() {
+        // A clean 60 bpm pulse is ALSO period-fs, but flows smoothly across record boundaries — the
+        // boundary gate must NOT treat it as the artifact and erase it.
+        var sig = [Int]()
+        for s in 0..<8 { sig.append(contentsOf: sineSecond(bpm: 60, startSample: s * fs)) }
+        let est = PpgHr.estimate(sig)
+        XCTAssertNotNil(est)
+        if let est { XCTAssertEqual(est.bpm, 60, accuracy: 2.0) }
+    }
+
     /// Streams decode tolerance: a JSON missing `ppg_hr` still decodes (defaults to empty), and a
     /// present `ppg_hr` round-trips. Mirrors the decodeIfPresent guard for the other biometric keys.
     func testStreamsDecodeToleratesMissingAndPresentPpgHr() throws {

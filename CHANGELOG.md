@@ -17,6 +17,22 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 2.8.6 — iPhone diagnostics & expectations, clearer labels, a journal fix
+
+- **New (iPhone):** a *Using NOOP on iPhone* note in Settings sets honest expectations (sideloading,
+  re-signing, unlocking after a reboot so history can sync) and shows how many days until your
+  sideloaded build expires. Shared strap logs now carry the iPhone details (iOS version, lock state,
+  background-refresh, low-power) that make iPhone-only issues quick to diagnose, with a one-tap
+  Diagnostics screen to copy them.
+- **Fixed:** copy that said "this Mac" now reads correctly on iPhone. Thanks @robin-liquidium. (#225)
+- **Fixed:** the journal could show the same prompt (e.g. magnesium) twice after importing — duplicates
+  are now merged, on every platform. Thanks @maddognik. (#224)
+- **Improved (WHOOP 5/MG):** the heart rate NOOP derives from the optical sensor on sleeping (sub-60 bpm)
+  stretches no longer risks snapping to ~60 bpm from a recording artifact, while a genuine 60 bpm is
+  preserved. Thanks @ryanbr. (#194)
+
+---
+
 ## 2.8.5 — Fixed: iPhone import, and a stuck store now self-heals
 
 - **Fixed (iPhone):** importing a WHOOP or Apple Health export could silently do nothing — iOS handed the

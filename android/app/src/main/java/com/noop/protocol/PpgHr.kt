@@ -155,9 +155,36 @@ object PpgHr {
      * Lag band: a faster HR is a SHORTER lag, so [MAX_BPM] → loLag and [MIN_BPM] → hiLag. Bounds use
      * round-to-nearest and clamp to [2, n-2] exactly as Swift does.
      */
+    /**
+     * Subtract the record-synchronous (period = fs) component — the artifact a per-record DC step /
+     * phase reset injects, which autocorrelates at lag = fs (60 bpm) and would SNAP a sub-60-bpm
+     * sleeper to 60 via the fundamental-period preference (#194, ryanbr). A true ~60-bpm pulse is also
+     * period-fs, so we only de-artifact when the record BOUNDARY is discontinuous (the artifact's
+     * signature) — a real pulse flows smoothly across it and is left untouched, preserving a true
+     * 60 bpm. Mirror of the Swift PpgHr.removeRecordRateComponent.
+     */
+    private fun removeRecordRateComponent(x: DoubleArray, fs: Int): DoubleArray {
+        val n = x.size
+        if (fs <= 1 || n < fs * 4) return x
+        var withinSum = 0.0; var withinCount = 0; var boundarySum = 0.0; var boundaryCount = 0
+        for (i in 1 until n) {
+            val d = Math.abs(x[i] - x[i - 1])
+            if (i % fs == 0) { boundarySum += d; boundaryCount++ } else { withinSum += d; withinCount++ }
+        }
+        if (withinCount == 0 || boundaryCount == 0) return x
+        val within = withinSum / withinCount
+        val boundary = boundarySum / boundaryCount
+        if (within <= 0.0 || boundary <= within * 3) return x // smooth → real pulse → leave it
+        val colSum = DoubleArray(fs); val colCount = IntArray(fs)
+        for (i in 0 until n) { val p = i % fs; colSum[p] += x[i]; colCount[p]++ }
+        val colMean = DoubleArray(fs) { p -> if (colCount[p] > 0) colSum[p] / colCount[p] else 0.0 }
+        return DoubleArray(n) { i -> x[i] - colMean[i % fs] }
+    }
+
     private fun estimateWindow(values: DoubleArray, ts: Long): Estimate? {
         if (values.size < SAMPLE_RATE_HZ * 3) return null // need >= 3 s to resolve a low HR
-        val x = detrend(values)
+        // De-artifact (#194) THEN detrend, so the autocorrelation sees the pulse, not a record-rate comb.
+        val x = detrend(removeRecordRateComponent(values, SAMPLE_RATE_HZ))
         val fsD = SAMPLE_RATE_HZ.toDouble()
         val loLag = maxOf(2, Math.round(fsD * 60 / MAX_BPM).toInt())
         val hiLag = minOf(x.size - 2, Math.round(fsD * 60 / MIN_BPM).toInt())

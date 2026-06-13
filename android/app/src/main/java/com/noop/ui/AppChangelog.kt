@@ -25,7 +25,7 @@ object AppChangelog {
      * Bump this when you add a release below. The "What's New" sheet shows automatically when the
      * stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
      */
-    const val CURRENT_VERSION = "2.8.5"
+    const val CURRENT_VERSION = "2.8.6"
 
     data class Release(
         val version: String,
@@ -36,6 +36,16 @@ object AppChangelog {
 
     /** Newest first. */
     val releases: List<Release> = listOf(
+        Release(
+            version = "2.8.6",
+            title = "Clearer labels, a journal fix, and steadier sleeping heart rate",
+            date = "June 2026",
+            items = listOf(
+                "Fixed: the journal could show the same prompt (e.g. magnesium) twice after importing — duplicates are now merged. Thanks @maddognik (#224).",
+                "Improved (WHOOP 5/MG): the heart rate NOOP derives from the optical sensor on sleeping (sub-60 bpm) stretches no longer risks snapping to ~60 bpm from a recording artifact, while a genuine 60 bpm is preserved. Thanks @ryanbr (#194).",
+                "iPhone: clearer expectations and richer diagnostics for sideloaded builds (iOS-side changes).",
+            ),
+        ),
         Release(
             version = "2.8.5",
             title = "Fixed: iPhone import, and a stuck store now self-heals",

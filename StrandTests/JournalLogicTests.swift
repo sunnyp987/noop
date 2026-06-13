@@ -48,6 +48,22 @@ final class JournalLogicTests: XCTestCase {
     }
 
     @MainActor
+    func testImportedMagnesiumWithTrailingWhitespaceDoesNotDoublePrompt() {
+        // #224: a WHOOP export leaves a trailing newline / non-breaking space on the cell, so the
+        // imported "Did you take magnesium?\n" must fold onto the starter, NOT add a second row.
+        let cat = JournalCatalogStore.mergeCatalog(
+            imported: ["Did you take magnesium?\n", "Did you take  magnesium?"],
+            custom: [])
+        let magCount = cat.filter {
+            $0.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+                .caseInsensitiveCompare("Did you take magnesium?") == .orderedSame
+        }.count
+        XCTAssertEqual(magCount, 1)
+        // No net growth — both imported variants dedupe against the starter.
+        XCTAssertEqual(cat.count, JournalCatalogStore.starterQuestions.count)
+    }
+
+    @MainActor
     func testHiddenQuestionsFilteredOutCaseInsensitively() {
         // Hide one starter (different casing) + one custom; both must drop from the merged catalog.
         let cat = JournalCatalogStore.mergeCatalog(
