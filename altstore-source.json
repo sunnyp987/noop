@@ -18,6 +18,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "2.8.5",
+          "buildVersion": "48",
+          "date": "2026-06-13",
+          "localizedDescription": "iPhone import fix (#179) + store self-heal after cross-platform restore (#222).",
+          "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.8.5/NOOP-v2.8.5-ios.ipa",
+          "size": 5842715,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "2.8.4",
           "buildVersion": "47",
           "date": "2026-06-13",
@@ -154,12 +163,12 @@
           "NSHealthUpdateUsageDescription": "NOOP writes the metrics it computes from your strap back into Apple Health, on-device and only when you allow it."
         }
       },
-      "version": "2.8.4",
-      "buildVersion": "47",
+      "version": "2.8.5",
+      "buildVersion": "48",
       "versionDate": "2026-06-13",
-      "versionDescription": "In-app 'How your scores work' guide for Charge/Effort/Rest.",
-      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.8.4/NOOP-v2.8.4-ios.ipa",
-      "size": 5838754,
+      "versionDescription": "iPhone import fix (#179) + store self-heal after cross-platform restore (#222).",
+      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.8.5/NOOP-v2.8.5-ios.ipa",
+      "size": 5842715,
       "minOSVersion": "17.0"
     }
   ],
