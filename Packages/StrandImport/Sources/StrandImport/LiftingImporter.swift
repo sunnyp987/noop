@@ -260,8 +260,10 @@ public enum LiftingImporter {
             let entryUnit = (entry["unit"] as? String)?.lowercased()
             let setList = (entry["sets"] as? [Any]) ?? []
             for case let set as [String: Any] in setList {
-                // A logged set has completed reps; templates without `completedReps` are skipped.
-                guard let r = liftosaurInt(set["completedReps"] ?? set["reps"]), r > 0 else { continue }
+                // A LOGGED set carries `completedReps`; a template/planned set has only `reps` and is
+                // skipped (don't import work that wasn't done). No fallback to `reps` — that was
+                // counting template sets into the volume load.
+                guard let r = liftosaurInt(set["completedReps"]), r > 0 else { continue }
                 sets += 1
                 reps += r
                 if let w = liftosaurWeightKg(set, entryUnit: entryUnit), w > 0 {
@@ -410,6 +412,11 @@ extension LiftingImporter {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         f.locale = Locale(identifier: "en_US_POSIX")
+        // POSIX locale doesn't group by default — enable a deterministic comma separator so the note
+        // reads "12,400 kg" on every runner/device (was printing a bare "12400").
+        f.usesGroupingSeparator = true
+        f.groupingSeparator = ","
+        f.groupingSize = 3
         f.maximumFractionDigits = 0
         return f
     }()

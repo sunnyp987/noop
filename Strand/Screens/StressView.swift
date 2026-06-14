@@ -813,9 +813,14 @@ struct StressNeedle: View {
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height)
             let radius = min(geo.size.width / 2, geo.size.height) - lineWidth / 2
             // Angle along the 180° span (π … 2π), measured from the hub.
-            let theta = Double.pi + Double.pi * min(max(fraction, 0), 1)
-            let tip = CGPoint(x: center.x + (radius - lineWidth * 0.55) * cos(theta),
-                              y: center.y + (radius - lineWidth * 0.55) * sin(theta))
+            // Explicitly-typed sub-expressions: the CGFloat↔Double mix in the tip arithmetic
+            // makes the SwiftUI type-checker thrash (it times out the body on a Debug build),
+            // so cast cos/sin to CGFloat and break the point out step by step. Behaviour-identical.
+            let theta: Double = .pi + .pi * min(max(fraction, 0), 1)
+            let reach: CGFloat = radius - lineWidth * 0.55
+            let tipX: CGFloat = center.x + reach * CGFloat(cos(theta))
+            let tipY: CGFloat = center.y + reach * CGFloat(sin(theta))
+            let tip = CGPoint(x: tipX, y: tipY)
             ZStack {
                 Path { p in
                     p.move(to: center)
