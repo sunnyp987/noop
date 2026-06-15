@@ -514,6 +514,19 @@ public final class BLEManager: NSObject, ObservableObject {
         preferredPeripheralUUID = uuid
     }
 
+    /// Re-point which device id live WHOOP samples store under, when the active WHOOP changes (a
+    /// WHOOP↔WHOOP switch via the registry). Only the `SourceCoordinator` calls this, and only when a
+    /// DIFFERENT registered WHOOP becomes active — the single-WHOOP path leaves the seeded "my-whoop" id
+    /// in place (bootstrapStore set it; this is never called), so that path is byte-for-byte unchanged.
+    /// Purely sets the manager's `deviceId`; the in-flight Collector/Backfiller, built once in
+    /// bootstrapStore against the id active then, keep writing under their captured id until the next
+    /// store bootstrap — so a full strap switch (disconnect → reconnect) is what makes new offloads
+    /// attribute to the new id. Additive: nothing on the single-WHOOP path invokes it.
+    public func setActiveDeviceId(_ id: String) {
+        guard !id.isEmpty else { return }
+        deviceId = id
+    }
+
     /// Add-a-WHOOP wizard: scan the selected family's WHOOP service and surface every nearby strap in
     /// `discoveredWhoops` WITHOUT auto-connecting. Turns on the `isPresentingScan` flag that diverts
     /// `didDiscover` to collect-not-connect, and uses duplicate-allowing scanning so RSSI refreshes.

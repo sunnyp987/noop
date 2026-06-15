@@ -234,7 +234,15 @@ final class AppModel: ObservableObject {
             live: live,
             storeHandle: { [weak self] in await self?.repo.storeHandle() },
             startWhoop: { [weak self] in self?.scan() },
-            stopWhoop: { [weak self] in self?.disconnect() })
+            stopWhoop: { [weak self] in self?.disconnect() },
+            // WHOOP targeting hooks — thin wrappers over BLEManager's existing additive setters, so the
+            // coordinator never references BLEManager directly (mirrors the start/stop injection). On the
+            // single-WHOOP path these are setPreferredPeripheral(nil) and (no setActiveDeviceId call),
+            // i.e. the BLE engine's defaults — no behaviour change.
+            setWhoopPreferredPeripheral: { [weak self] uuid in self?.ble.setPreferredPeripheral(uuid) },
+            setWhoopActiveDeviceId: { [weak self] id in self?.ble.setActiveDeviceId(id) },
+            // The engine's last-connected WHOOP uuid drives first-connect identity adoption.
+            connectedPeripheralUUID: ble.$connectedPeripheralUUID.eraseToAnyPublisher())
         coordinator.start()
         self.deviceRegistry = registry
         self.sourceCoordinator = coordinator

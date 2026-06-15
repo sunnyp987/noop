@@ -6,20 +6,27 @@ import WhoopStore
 ///
 /// WHOOP-FIRST, ZERO REGRESSION
 /// ----------------------------
-/// This coordinator is a deliberate **NO-OP whenever the active device is the WHOOP** (id
-/// "my-whoop", or any `brand == "WHOOP"` row). That is the default state and EVERY state where no
-/// generic strap is paired: WHOOP is active, so the coordinator does nothing and the existing WHOOP
-/// flow (`BLEManager` via `AppModel.scan(...)`) runs exactly as it does today. It only ever *acts*
-/// when the active device is a NON-WHOOP generic HR strap:
+/// This coordinator is a deliberate **NO-OP for the single-WHOOP user** (one row, id "my-whoop",
+/// `peripheralId` nil, no other device). That is the default state and EVERY state where no second
+/// device is paired: WHOOP is active, `setPreferredPeripheral(nil)` keeps "connect to the first WHOOP
+/// found", the WHOOP's deviceId stays "my-whoop", and the existing WHOOP flow (`BLEManager` via
+/// `AppModel.scan(...)`) runs exactly as it does today. On a plain launch with one WHOOP it issues NO
+/// scan, NO disconnect, NO re-point — the only side effect is one `setPreferredPeripheral(nil)`, which
+/// is the BLEManager default and a no-op there.
+///
+/// It only ever *acts* beyond that when the registry has more than the seeded WHOOP:
 ///
 ///   • switching TO a generic strap → `stopWhoop()` (BLEManager's existing `disconnect()`), then
 ///     `start` the isolated `StandardHRSource` for that strap's deviceId.
-///   • switching BACK to WHOOP     → `stop()` the `StandardHRSource`, then `startWhoop()`
-///     (BLEManager's existing scan entry point) — but only if we had actually been on a strap, so a
-///     plain launch with WHOOP active does NOT re-trigger a redundant WHOOP scan.
+///   • switching BACK to WHOOP     → `stop()` the `StandardHRSource`, re-point the WHOOP connection to
+///     the now-active WHOOP, then `startWhoop()` (BLEManager's existing scan entry point).
+///   • switching WHOOP → a DIFFERENT WHOOP → tear down the current WHOOP link, set its preferred
+///     peripheral + active deviceId to the new WHOOP, and reconnect.
 ///
-/// It never imports or references `BLEManager`: the WHOOP start/stop are injected closures from the
-/// app model, so the two BLE flows stay fully decoupled (mirrors `StandardHRSource`'s isolation).
+/// It never imports or references `BLEManager`: the WHOOP start/stop AND the WHOOP targeting hooks
+/// (preferred peripheral, active deviceId) are injected closures from the app model, so the two BLE
+/// flows stay fully decoupled (mirrors `StandardHRSource`'s isolation). The one input it observes off
+/// the BLE engine — `connectedPeripheralUUID` — arrives as a plain publisher, not the manager itself.
 @MainActor
 final class SourceCoordinator: ObservableObject {
 
@@ -34,6 +41,14 @@ final class SourceCoordinator: ObservableObject {
     private let startWhoop: () -> Void
     /// Pause WHOOP via its EXISTING teardown (e.g. `AppModel.disconnect()` → `BLEManager.disconnect`).
     private let stopWhoop: () -> Void
+    /// Pin the WHOOP connection to a specific strap (nil = first WHOOP found = single-WHOOP default).
+    /// Wraps `BLEManager.setPreferredPeripheral`. Called only on a WHOOP transition.
+    private let setWhoopPreferredPeripheral: (String?) -> Void
+    /// Re-point which device id live WHOOP samples store under. Wraps `BLEManager.setActiveDeviceId`.
+    /// Called only when the active WHOOP is NOT the seeded "my-whoop" — the legacy path never invokes it.
+    private let setWhoopActiveDeviceId: (String) -> Void
+    /// The most-recently-connected WHOOP peripheral's uuid, from `BLEManager.$connectedPeripheralUUID`.
+    private let connectedPeripheralUUID: AnyPublisher<String?, Never>
 
     // MARK: - State
 
@@ -44,8 +59,12 @@ final class SourceCoordinator: ObservableObject {
     /// True once we've transitioned onto a generic strap. While false (the default / WHOOP-active
     /// state), switching to WHOOP is a pure no-op — we never issue a redundant WHOOP (re)scan.
     private var onStrap = false
+    /// The WHOOP device id we're currently pointed at, set the first time WHOOP becomes active and on
+    /// every WHOOP→WHOOP re-point. nil until the first WHOOP activation is handled. Lets us tell "same
+    /// WHOOP, no change" (no churn) from "a DIFFERENT WHOOP became active" (re-point + reconnect).
+    private var activeWhoopId: String?
 
-    private var cancellable: AnyCancellable?
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Init
 
@@ -55,51 +74,105 @@ final class SourceCoordinator: ObservableObject {
     ///   - storeHandle: resolves the shared `WhoopStore` for the strap persist closure.
     ///   - startWhoop: WHOOP's existing scan entry point (injected so we never touch `BLEManager`).
     ///   - stopWhoop: WHOOP's existing disconnect (injected for the same reason).
+    ///   - setWhoopPreferredPeripheral: pin the WHOOP scan to one strap (nil = first found).
+    ///   - setWhoopActiveDeviceId: re-point which id WHOOP samples store under (multi-WHOOP only).
+    ///   - connectedPeripheralUUID: the BLE engine's last-connected WHOOP uuid, for identity adoption.
     init(registry: DeviceRegistry,
          live: LiveState,
          storeHandle: @escaping () async -> WhoopStore?,
          startWhoop: @escaping () -> Void,
-         stopWhoop: @escaping () -> Void) {
+         stopWhoop: @escaping () -> Void,
+         setWhoopPreferredPeripheral: @escaping (String?) -> Void,
+         setWhoopActiveDeviceId: @escaping (String) -> Void,
+         connectedPeripheralUUID: AnyPublisher<String?, Never>) {
         self.registry = registry
         self.live = live
         self.storeHandle = storeHandle
         self.startWhoop = startWhoop
         self.stopWhoop = stopWhoop
+        self.setWhoopPreferredPeripheral = setWhoopPreferredPeripheral
+        self.setWhoopActiveDeviceId = setWhoopActiveDeviceId
+        self.connectedPeripheralUUID = connectedPeripheralUUID
     }
 
     // MARK: - Wiring
 
-    /// Begin observing `registry.activeDeviceId`. `removeDuplicates()` collapses redundant emissions;
-    /// the first value (WHOOP on a normal launch) is handled by `activeDeviceChanged` as a no-op.
+    /// Begin observing `registry.activeDeviceId` AND the BLE engine's connected-peripheral uuid.
+    /// `removeDuplicates()` collapses redundant emissions; the first activeDeviceId (WHOOP on a normal
+    /// launch) is handled by `activeDeviceChanged` and, for the single WHOOP, does nothing but set the
+    /// default preferred peripheral (nil) — no scan/disconnect churn. The connected-uuid sink drives
+    /// first-connect identity adoption.
     func start() {
-        cancellable = registry.$activeDeviceId
+        registry.$activeDeviceId
             .removeDuplicates()
             .sink { [weak self] id in self?.activeDeviceChanged(to: id) }
+            .store(in: &cancellables)
+
+        connectedPeripheralUUID
+            .removeDuplicates()
+            .sink { [weak self] uuid in self?.connectedPeripheralChanged(to: uuid) }
+            .store(in: &cancellables)
     }
 
     // MARK: - Transitions
 
     /// Resolve the device for `id` and reconcile which live source is running. Idempotent and guarded
     /// against redundant churn:
-    ///   • WHOOP active while we were NOT on a strap (the default / first-launch case) → DO NOTHING.
-    ///   • WHOOP active after a strap → stop the strap source + resume WHOOP exactly once.
+    ///   • A WHOOP, same one we're already on (incl. the single-WHOOP first launch) → DO NOTHING new.
+    ///   • A DIFFERENT WHOOP → re-point the WHOOP connection (preferred peripheral + deviceId) + reconnect.
+    ///   • WHOOP active after a strap → stop the strap source + resume WHOOP.
     ///   • A generic strap → pause WHOOP + (re)start `StandardHRSource` for that strap's id.
     func activeDeviceChanged(to id: String) {
         if isWhoop(id) {
-            switchToWhoop()
+            switchToWhoop(id: id)
         } else {
             switchToStrap(id: id)
         }
     }
 
-    /// Active device is the WHOOP. If we'd been on a strap, tear that source down and resume WHOOP;
-    /// otherwise (the dormant default) this is a pure no-op so the existing WHOOP startup is untouched.
-    private func switchToWhoop() {
-        guard onStrap else { return }   // already WHOOP-mode (incl. first launch) → no churn
-        standardSource?.stop()
-        activeStrapId = nil
-        onStrap = false
-        startWhoop()
+    /// Active device is a WHOOP (`id`). Three sub-cases, all churn-guarded:
+    ///   • We were already on this exact WHOOP and not on a strap → pure no-op (the dormant default;
+    ///     the single-WHOOP launch lands here and touches nothing but the initial preferred-peripheral).
+    ///   • We were on a generic strap → stop that source and resume WHOOP, pointed at this WHOOP.
+    ///   • We were on a DIFFERENT WHOOP → drop that WHOOP link and reconnect to this one.
+    private func switchToWhoop(id: String) {
+        // Already streaming this exact WHOOP with no strap in between → nothing to do.
+        if !onStrap, activeWhoopId == id { return }
+
+        let peripheralId = peripheralId(for: id)
+
+        if onStrap {
+            // Coming back from a generic strap: tear that source down first.
+            standardSource?.stop()
+            standardSource = nil
+            activeStrapId = nil
+            onStrap = false
+            pointWhoop(at: id, peripheralId: peripheralId)
+            startWhoop()
+        } else if activeWhoopId == nil {
+            // First WHOOP activation of the session (the normal launch path). Set the targeting so the
+            // existing WHOOP flow — already kicked off elsewhere on launch — uses it. For the single
+            // seeded "my-whoop" (peripheralId nil, id "my-whoop") this is setPreferredPeripheral(nil)
+            // and NO setActiveDeviceId / NO scan / NO disconnect: byte-for-byte today's behaviour.
+            pointWhoop(at: id, peripheralId: peripheralId)
+        } else {
+            // WHOOP → a DIFFERENT WHOOP: drop the current link, re-point, and reconnect.
+            stopWhoop()
+            pointWhoop(at: id, peripheralId: peripheralId)
+            startWhoop()
+        }
+    }
+
+    /// Apply the WHOOP targeting for the now-active WHOOP `id`. Always sets the preferred peripheral
+    /// (nil for the legacy "my-whoop" → connect to any WHOOP, unchanged). Re-points the sample deviceId
+    /// ONLY for a non-legacy WHOOP — the seeded "my-whoop" keeps the bootstrap-set id, so the single-
+    /// WHOOP path never calls `setActiveDeviceId`. Records `activeWhoopId` for future change detection.
+    private func pointWhoop(at id: String, peripheralId: String?) {
+        setWhoopPreferredPeripheral(peripheralId)
+        if id != "my-whoop" {
+            setWhoopActiveDeviceId(id)
+        }
+        activeWhoopId = id
     }
 
     /// Active device is a generic strap. Pause WHOOP (once, on the WHOOP→strap edge) and run the
@@ -125,7 +198,45 @@ final class SourceCoordinator: ObservableObject {
         onStrap = true
     }
 
-    // MARK: - Classification
+    // MARK: - Identity adoption
+
+    /// The BLE engine connected to a WHOOP peripheral (`uuid`). Persist that stable identity onto the
+    /// CURRENTLY ACTIVE device when it's a WHOOP and hasn't adopted one yet — so the legacy "my-whoop"
+    /// learns its strap's id on first connect, and a freshly-paired WHOOP confirms its identity.
+    ///
+    /// Guards (so this never corrupts the registry):
+    ///   • nil uuid (a disconnect/never-connected republish) → ignore.
+    ///   • the active device is NOT a WHOOP (a generic strap is active) → ignore; this connection isn't ours.
+    ///   • the active WHOOP already has a DIFFERENT non-nil peripheralId → a different strap connected;
+    ///     LOG it and do NOT clobber the stored identity.
+    ///   • it already matches → nothing to write.
+    private func connectedPeripheralChanged(to uuid: String?) {
+        guard let uuid else { return }
+
+        let activeId = registry.activeDeviceId
+        guard isWhoop(activeId),
+              let device = registry.devices.first(where: { $0.id == activeId }) else { return }
+
+        switch device.peripheralId {
+        case .none:
+            // First connect for this WHOOP row → adopt the strap's stable identity.
+            registry.setPeripheralId(activeId, peripheralId: uuid)
+        case .some(uuid):
+            break                               // already adopted this exact strap → nothing to do
+        case .some(let existing):
+            // A DIFFERENT strap connected under this WHOOP row. Never silently overwrite — that would
+            // mis-map another physical strap's samples onto this device. Log and leave the stored id.
+            live.append(log: "Multi-WHOOP: active device \(activeId) is registered to strap \(existing) but \(uuid) connected — not overwriting.")
+        }
+    }
+
+    // MARK: - Lookups / classification
+
+    /// The stored `peripheralId` for a device id, if the registry knows it. nil for the legacy
+    /// "my-whoop" until it adopts one (→ connect to any WHOOP, unchanged) and for an unknown id.
+    private func peripheralId(for id: String) -> String? {
+        registry.devices.first(where: { $0.id == id })?.peripheralId
+    }
 
     /// Classify a device id as WHOOP vs a generic strap. WHOOP if the id is the canonical
     /// "my-whoop", or the registry row's `brand` is "WHOOP" (case-insensitive). Unknown ids default
