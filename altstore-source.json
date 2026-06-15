@@ -18,6 +18,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "3.3.0",
+          "buildVersion": "81",
+          "date": "2026-06-15",
+          "localizedDescription": "Strap battery alerts (low/full) on all platforms",
+          "downloadURL": "https://github.com/NoopApp/noop/releases/download/v3.3.0/NOOP-v3.3.0-ios.ipa",
+          "size": 13747091,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "3.2.0",
           "buildVersion": "80",
           "date": "2026-06-15",
@@ -451,12 +460,12 @@
           "NSHealthUpdateUsageDescription": "NOOP writes the metrics it computes from your strap back into Apple Health, on-device and only when you allow it."
         }
       },
-      "version": "3.2.0",
-      "buildVersion": "80",
+      "version": "3.3.0",
+      "buildVersion": "81",
       "versionDate": "2026-06-15",
-      "versionDescription": "iOS 17 / macOS 14 API migration (maintenance, no behaviour change)",
-      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v3.2.0/NOOP-v3.2.0-ios.ipa",
-      "size": 13744182,
+      "versionDescription": "Strap battery alerts (low/full) on all platforms",
+      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v3.3.0/NOOP-v3.3.0-ios.ipa",
+      "size": 13747091,
       "minOSVersion": "17.0"
     }
   ],
