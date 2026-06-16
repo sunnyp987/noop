@@ -57,6 +57,8 @@ struct SettingsView: View {
     @AppStorage("appIcon.alt") private var useNavyIcon = false
     // Light/Dark/System theme. Read by both app roots' .preferredColorScheme; default follows the OS.
     @AppStorage(AppearanceMode.storageKey) private var appearanceRaw = AppearanceMode.system.rawValue
+    // Chart colour style: Titanium (brand) or Classic (throwback red→green). Re-colours gauges + charts.
+    @AppStorage(ChartStyle.storageKey) private var chartStyleRaw = ChartStyle.titanium.rawValue
 
     /// The strap model the user last picked (same key the scan pickers write). Gates the WHOOP 4.0-only
     /// rename control in the strap card — renaming uses the Harvard command set, which a 5/MG doesn't share.
@@ -493,6 +495,19 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                     .fixedSize()
                     .accessibilityLabel("Theme")
+                }
+                FormRow(label: "Chart colours") {
+                    // Titanium = the brand gold/amber/blue data ramps; Classic = the throwback
+                    // red→amber→green readiness scale (cool→hot zones, green→red stress). Both schemes.
+                    Picker("Chart colours", selection: $chartStyleRaw) {
+                        ForEach(ChartStyle.allCases) { style in
+                            Text(style.label).tag(style.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                    .accessibilityLabel("Chart colours")
                 }
                 #if os(iOS)
                 FormRow(label: "App icon") {

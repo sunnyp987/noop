@@ -9,6 +9,8 @@ struct StrandApp: App {
     @StateObject private var router = NavRouter()
     /// Appearance preference (System/Light/Dark). Default follows the OS; the Settings picker writes it.
     @AppStorage(AppearanceMode.storageKey) private var appearanceRaw = AppearanceMode.system.rawValue
+    /// Chart data-colour style (Titanium / Classic throwback). Re-colours gauges + charts.
+    @AppStorage(ChartStyle.storageKey) private var chartStyleRaw = ChartStyle.titanium.rawValue
 
     var body: some Scene {
         WindowGroup {
@@ -23,6 +25,7 @@ struct StrandApp: App {
                 .environmentObject(router)
                 .frame(minWidth: 1000, minHeight: 700)
                 .preferredColorScheme(AppearanceMode.resolve(appearanceRaw).colorScheme)
+                .chartStyle(chartStyleRaw)
                 // Dynamic Type now scales the prose/label roles (StrandFont). Cap the upper end so the
                 // fixed-geometry tiles/gauges stay legible at the largest accessibility sizes rather than
                 // clipping; the common Larger-Text range still scales fully.

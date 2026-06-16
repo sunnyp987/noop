@@ -325,6 +325,8 @@ fun SettingsScreen(vm: AppViewModel) {
 
     // Theme (System / Light / Dark) — drives NoopTheme; AppearancePrefs mirrors it in snapshot state.
     var themeMode by remember { mutableStateOf(AppearancePrefs.mode) }
+    // Chart colours (Titanium / Classic) — re-colours gauges + charts; ChartStylePrefs mirrors it live.
+    var chartStyle by remember { mutableStateOf(ChartStylePrefs.style) }
 
     // SAF launchers — CreateDocument for export, OpenDocument for import.
     val exportLauncher = rememberLauncherForActivityResult(
@@ -685,6 +687,19 @@ fun SettingsScreen(vm: AppViewModel) {
                     onSelect = { mode ->
                         themeMode = mode
                         AppearancePrefs.set(context, mode)
+                    },
+                )
+            }
+            FormRow(label = "Chart colours") {
+                // Titanium = brand gold/amber/blue ramps; Classic = throwback red→green readiness scale
+                // (cool→hot zones, green→red stress). Re-colours every gauge/chart, in both schemes.
+                SegmentedPillControl(
+                    items = listOf(ChartStyle.TITANIUM, ChartStyle.CLASSIC),
+                    selection = chartStyle,
+                    label = { it.label },
+                    onSelect = { style ->
+                        chartStyle = style
+                        ChartStylePrefs.set(context, style)
                     },
                 )
             }

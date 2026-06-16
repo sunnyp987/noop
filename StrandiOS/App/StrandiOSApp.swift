@@ -22,6 +22,8 @@ struct StrandiOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
     /// Appearance preference (System/Light/Dark). Default follows the OS; the Settings picker writes it.
     @AppStorage(AppearanceMode.storageKey) private var appearanceRaw = AppearanceMode.system.rawValue
+    /// Chart data-colour style (Titanium / Classic throwback). Re-colours gauges + charts.
+    @AppStorage(ChartStyle.storageKey) private var chartStyleRaw = ChartStyle.titanium.rawValue
 
     init() {
         // Debug-only canary: trips if the App Group entitlement is missing on this target before any
@@ -50,6 +52,7 @@ struct StrandiOSApp: App {
                 .environmentObject(health)
                 .environmentObject(router)
                 .preferredColorScheme(AppearanceMode.resolve(appearanceRaw).colorScheme)
+                .chartStyle(chartStyleRaw)
                 // Dynamic Type now scales the prose/label roles (StrandFont). Cap the upper end so the
                 // fixed-geometry tiles/gauges stay legible at the largest accessibility sizes rather than
                 // clipping; the common Larger-Text range still scales fully.

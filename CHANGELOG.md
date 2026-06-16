@@ -17,6 +17,10 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 4.4.0 — Classic chart colours: a throwback toggle (all platforms)
+
+- **A new Chart-colours toggle re-skins every gauge, ring, chart and scale to the traditional red → amber → green readiness palette** — the colourful style people know. **Settings → Appearance → Chart colours**: **Titanium** (the brand gold/amber/blue ramps, the default) or **Classic**. Classic re-colours the *data* — recovery red→green, HR zones cool→hot, stress green→red, a purple REM sleep band — and leaves the app's chrome (surfaces, text, buttons) untouched. Works in **both Light and Dark**. Architecture: the data-ramp accessors in the palette branch on the chart style (a global on Apple, snapshot state on Android), so one toggle re-colours every chart with no per-screen rework. Nothing about your numbers changes — only how they're coloured.
+
 ## 4.3.2 — Light theme tuning (all platforms)
 
 - **Light got dialled in, from early feedback that it leaned too gold.** The *chrome* — links, the selected range pill, header accents — now uses the deep brand **blue** on Light, with **gold reserved for what it means** (the Charge/recovery rings and the action button). Cards sit on a slightly **deeper warm canvas with a stronger drop shadow**, so they stand out more clearly. On **macOS**, a sidebar glitch where the NOOP lockup overlapped the navigation list is fixed (it's now a proper fixed header above the list). **Dark is unchanged.**

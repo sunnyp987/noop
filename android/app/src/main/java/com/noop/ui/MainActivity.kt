@@ -69,9 +69,10 @@ class MainActivity : ComponentActivity() {
             requestBlePermissions()
         }
 
-        // Load the Light/Dark/System preference before first composition so the theme is correct
-        // from the very first frame (no flash).
+        // Load the Light/Dark/System + chart-colour preferences before first composition so the theme
+        // and chart ramps are correct from the very first frame (no flash).
         AppearancePrefs.load(this)
+        ChartStylePrefs.load(this)
 
         setContent {
             NoopTheme {

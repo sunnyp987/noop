@@ -1,5 +1,41 @@
 import SwiftUI
 
+/// The data-visualisation colour style: the brand "Titanium & Gold" data ramps, or a "Classic"
+/// throwback — the recognizable red → amber → green readiness scale (cool→hot zones, green→red stress,
+/// purple REM) that health apps have always used. Works in BOTH light and dark. It only re-colours the
+/// DATA encodings (gauge rings, charts, sparklines, scales, stage bands) — never the chrome/surfaces.
+///
+/// Read globally via `StrandPalette.chartStyle` (set from `@AppStorage(ChartStyle.storageKey)` at the
+/// app root); the data-ramp accessors in `StrandPalette` branch on it. The app root keys its content on
+/// the raw value so a flip re-renders the visible charts live.
+public enum ChartStyle: String, CaseIterable, Identifiable, Sendable {
+    case titanium   // brand: gold recovery, amber strain, blue rest
+    case classic    // throwback: red→green recovery, cool→hot zones, green→red stress
+
+    public var id: String { rawValue }
+    public static let storageKey = "chart.style"
+
+    public var label: String {
+        switch self {
+        case .titanium: return "Titanium"
+        case .classic:  return "Classic"
+        }
+    }
+
+    public static func resolve(_ raw: String) -> ChartStyle { ChartStyle(rawValue: raw) ?? .titanium }
+}
+
+/// Applies the chart style: sets the global `StrandPalette.chartStyle` (read by the data-ramp
+/// accessors) AND keys the content on the raw value so a flip re-renders the visible charts. The
+/// global is set during body evaluation, before the keyed content renders, so the new ramps are live
+/// on the rebuild. Apply at each app root: `.chartStyle(chartStyleRaw)`.
+public extension View {
+    func chartStyle(_ raw: String) -> some View {
+        StrandPalette.chartStyle = ChartStyle.resolve(raw)
+        return self.id("noop.chartStyle.\(raw)")
+    }
+}
+
 /// The user's appearance preference for the whole app. Persisted via
 /// `@AppStorage(AppearanceMode.storageKey)`. `.system` follows the OS (the default);
 /// `.light` / `.dark` force a scheme regardless of the system setting.

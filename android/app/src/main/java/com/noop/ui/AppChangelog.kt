@@ -25,7 +25,7 @@ object AppChangelog {
      * Bump this when you add a release below. The "What's New" sheet shows automatically when the
      * stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
      */
-    const val CURRENT_VERSION = "4.3.2"
+    const val CURRENT_VERSION = "4.4.0"
 
     data class Release(
         val version: String,
@@ -36,6 +36,14 @@ object AppChangelog {
 
     /** Newest first. */
     val releases: List<Release> = listOf(
+        Release(
+            version = "4.4.0",
+            title = "Classic chart colours — a throwback toggle",
+            date = "June 2026",
+            items = listOf(
+                "**You can now flip every gauge, ring, chart and scale to the traditional red → amber → green readiness palette** — the colourful style people know. Settings → Appearance → **Chart colours**: pick **Titanium** (the brand gold/amber/blue ramps, the default) or **Classic**. Classic re-colours the *data* — recovery goes red→green, HR zones run cool→hot, stress is green→red, sleep gets a purple REM band — while leaving the app's chrome (surfaces, text, buttons) exactly as it is. It works in **both Light and Dark**. Nothing about your numbers changes; only how they're coloured.",
+            ),
+        ),
         Release(
             version = "4.3.2",
             title = "Light theme tuning",
