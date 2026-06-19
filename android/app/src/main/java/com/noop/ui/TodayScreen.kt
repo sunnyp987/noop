@@ -37,9 +37,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -79,6 +81,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -110,11 +113,19 @@ import kotlin.math.roundToInt
  * all from the my-whoop source). Missing current-day values render as explicit
  * "No Data" states instead of raw dashes, so old imports do not look like today.
  */
+
+/** Stable Today info-card ids (the dismissed-flag suffix + the inbox `restorePayload`). Match the
+ *  iOS card ids so an export/import round-trips. */
+private const val CARD_SCORES_BUILDING = "scoresBuilding"
+private const val CARD_NEW_HERE = "newHere"
+
 @Composable
 fun TodayScreen(
     viewModel: AppViewModel,
     onSupport: () -> Unit = {},
     onQuickActions: () -> Unit = {},
+    updateStore: UpdateStore? = null,
+    onOpenUpdates: () -> Unit = {},
 ) {
     val today by viewModel.today.collectAsStateWithLifecycle()
     val alert by viewModel.healthAlert.collectAsStateWithLifecycle()
@@ -185,6 +196,70 @@ fun TodayScreen(
     val dismissScoringCard: () -> Unit = {
         ScoringGuidePrefs.setCardSeen(context)
         scoringCardSeen = true
+    }
+
+    // Per-card "dismissed into the inbox" flags for the two Today info-cards. A small × on each card
+    // sets these (and posts a `.dismissedCard` update); "Restore to Today" in the inbox flips them back
+    // via the shared TodayCardDismissal key. Read once (SharedPreferences isn't reactive), driven locally.
+    var scoresBuildingDismissed by remember {
+        mutableStateOf(TodayCardDismissal.isDismissed(context, CARD_SCORES_BUILDING))
+    }
+    var newHereDismissed by remember {
+        mutableStateOf(TodayCardDismissal.isDismissed(context, CARD_NEW_HERE))
+    }
+    // Dismiss a Today info-card INTO the inbox: persist its flag, hide it, and post a restorable
+    // `.dismissedCard` update carrying the card id. Mirrors the iOS `dismissTodayCard`.
+    val dismissTodayCard: (String, String, String) -> Unit = { id, title, message ->
+        TodayCardDismissal.setDismissed(context, id, true)
+        when (id) {
+            CARD_SCORES_BUILDING -> scoresBuildingDismissed = true
+            CARD_NEW_HERE -> newHereDismissed = true
+        }
+        updateStore?.post(
+            UpdateItem(
+                kind = UpdateKind.DISMISSED_CARD,
+                title = title,
+                message = message,
+                restorePayload = id,
+            ),
+        )
+    }
+    // Honour a "Restore to Today" tap from the inbox: flip the matching dismissed flag back so the card
+    // reappears (the inbox also cleared the shared pref directly, but this re-reads it into local state
+    // for an already-mounted Today). Cleared once handled. Mirrors the iOS restoreRequest observer.
+    val restoreSignal = updateStore?.restoreRequest
+    LaunchedEffect(restoreSignal) {
+        if (updateStore != null && restoreSignal != null) {
+            when (restoreSignal) {
+                CARD_SCORES_BUILDING -> scoresBuildingDismissed = false
+                CARD_NEW_HERE -> newHereDismissed = false
+            }
+            updateStore.restoreRequest = null
+        }
+    }
+
+    // The day-count seen on the previous observation, so a refresh/import that brings in NEW days can
+    // post ONE honest `.reading` update ("N new days of history landed", deep-linking to Trends). Null
+    // until the first observation establishes a baseline, so the very first load never posts — we only
+    // announce genuine growth. The count comes straight from the merged history (no fabricated numbers).
+    var lastSeenDayCount by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(days.size, updateStore) {
+        val store = updateStore ?: return@LaunchedEffect
+        val now = days.size
+        val previous = lastSeenDayCount
+        lastSeenDayCount = now
+        if (previous != null && now > previous) {
+            val added = now - previous
+            val daysWord = if (added == 1) "day" else "days"
+            store.post(
+                UpdateItem(
+                    kind = UpdateKind.READING,
+                    title = "New data landed",
+                    message = "$added new $daysWord of history is ready in Trends.",
+                    deepLink = "trends",
+                ),
+            )
+        }
     }
 
     // The newest Apple Health / Health Connect body weight, loaded off the main thread. Null until the
@@ -345,6 +420,11 @@ fun TodayScreen(
                     )
                 }
                 Spacer(Modifier.width(Metrics.space8))
+                // The Updates "ringer" — between the heart and the +. Bell with a gold unread badge.
+                if (updateStore != null) {
+                    UpdateBell(unreadCount = updateStore.unreadCount, onClick = onOpenUpdates)
+                    Spacer(Modifier.width(Metrics.space8))
+                }
                 QuickActionDisc(onClick = onQuickActions)
             }
         },
@@ -388,15 +468,22 @@ fun TodayScreen(
             }
         }
 
-        // One-time "New here?" card pointing at the scoring guide — dismissible, shown until the
-        // user opens the guide OR closes it, after which ScoringGuidePrefs keeps it gone for good.
-        if (!scoringCardSeen) {
+        // One-time "New here?" card pointing at the scoring guide. Opening the guide marks it seen for
+        // good (ScoringGuidePrefs); the × instead dismisses it INTO the Updates inbox (restorable from
+        // there), so it's hidden but recoverable rather than gone forever.
+        if (!scoringCardSeen && !newHereDismissed) {
             ScoringGuideIntroCard(
                 onOpen = {
                     dismissScoringCard()
                     openGuide(null)
                 },
-                onDismiss = dismissScoringCard,
+                onDismiss = {
+                    dismissTodayCard(
+                        CARD_NEW_HERE,
+                        "New here?",
+                        "How Charge, Effort and Rest are calculated — and how they differ from WHOOP.",
+                    )
+                },
             )
         }
 
@@ -404,17 +491,35 @@ fun TodayScreen(
 
         // When there is no daily score yet (today's recovery is null / no history),
         // lead with the "live now, history one import away" note so the empty tiles
-        // below are explained rather than just dashed out.
+        // below are explained rather than just dashed out. A small × dismisses it INTO
+        // the Updates inbox (restorable from there). Only anchored to today (offset 0).
         if (displayMetric?.recovery == null) {
             // While the strap is mid-offload, say so — empty tiles read as final otherwise (#77).
             if (live.backfilling) SyncingHistoryNote(chunks = live.syncChunksThisSession)
-            DataPendingNote(
-                title = "Live now. Your scores are building.",
-                body = "Your live heart rate is working from the strap, and recovery, strain " +
-                    "and sleep build from it over your next few nights of wear, sharpening as it " +
-                    "learns your baseline. Want your full history instantly? Import your WHOOP " +
-                    "export in Data Sources and it backfills in about a minute.",
-            )
+            if (selectedDayOffset != 0 || !scoresBuildingDismissed) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    DataPendingNote(
+                        title = "Live now. Your scores are building.",
+                        body = "Your live heart rate is working from the strap, and recovery, strain " +
+                            "and sleep build from it over your next few nights of wear, sharpening as it " +
+                            "learns your baseline. Want your full history instantly? Import your WHOOP " +
+                            "export in Data Sources and it backfills in about a minute.",
+                    )
+                    // The × is only meaningful for today's card (a past day's note isn't dismissed).
+                    if (selectedDayOffset == 0 && updateStore != null) {
+                        TodayCardDismissButton(
+                            modifier = Modifier.align(Alignment.TopEnd),
+                            onClick = {
+                                dismissTodayCard(
+                                    CARD_SCORES_BUILDING,
+                                    "Live now. Your scores are building.",
+                                    "Charge, Effort and Rest build over your next few nights of wear.",
+                                )
+                            },
+                        )
+                    }
+                }
+            }
         }
 
         if (alert != null) IllnessBanner(alert!!)
@@ -566,6 +671,73 @@ fun TodayScreen(
  * the same gold language as the old bottom-bar disc, ~34dp, no float and no glow: just the gold
  * gradient fill with a hairline rim, the "+" glyph in the gold-deep readout colour.
  */
+/**
+ * The Updates "ringer": a bell IconButton (~30dp, textSecondary tint) with a small gold unread-count
+ * badge overlaid top-trailing when [unreadCount] > 0. Tapping opens the inbox sheet. Mirrors the iOS
+ * `updateBell` (bell.badge + gold capsule). No glow — just the bell and the gold pill.
+ */
+@Composable
+private fun UpdateBell(unreadCount: Int, onClick: () -> Unit) {
+    val label = if (unreadCount > 0) "Updates, $unreadCount unread" else "Updates"
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (unreadCount > 0) Icons.Filled.NotificationsActive else Icons.Outlined.Notifications,
+            contentDescription = null,
+            tint = Palette.textSecondary,
+            modifier = Modifier.size(Metrics.iconSmall),
+        )
+        if (unreadCount > 0) {
+            // Gold count pill, nudged into the top-trailing corner over the bell.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 5.dp, y = (-3).dp)
+                    .clip(RoundedCornerShape(Metrics.cornerPill))
+                    .background(Palette.gold)
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+            ) {
+                Text(
+                    if (unreadCount > 99) "99" else unreadCount.toString(),
+                    style = NoopType.footnote.copy(fontSize = 9.sp),
+                    color = Palette.goldDeepText,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A small top-trailing × for a Today info-card that has no built-in dismiss control (the shared
+ * [DataPendingNote]). Matches the "New here?" card's × styling. Dismisses the card into the inbox.
+ */
+@Composable
+private fun TodayCardDismissButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier
+            .size(Metrics.iconButton)
+            .semantics { contentDescription = "Dismiss to Updates" },
+    ) {
+        Icon(
+            Icons.Filled.Close,
+            contentDescription = null,
+            tint = Palette.textTertiary,
+            modifier = Modifier.size(14.dp),
+        )
+    }
+}
+
 @Composable
 private fun QuickActionDisc(onClick: () -> Unit) {
     Box(

@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -436,6 +437,13 @@ fun NoopRoot() {
     }
     var lastSeenChangelog by remember {
         mutableStateOf(prefs.getString(NoopPrefs.KEY_LAST_SEEN_CHANGELOG, "") ?: "")
+    }
+
+    // Seed the current What's New into the Updates inbox ONCE per version (idempotent — tracks the last
+    // seeded version), for onboarded users only so a brand-new user's first run isn't pre-populated. The
+    // bell in the Today header surfaces it; the inbox row deep-links to the full changelog read.
+    LaunchedEffect(onboarded) {
+        if (onboarded) UpdateStore.from(context).seedWhatsNewIfNeeded()
     }
 
     // Terms acknowledgment gate — over EVERYTHING (before onboarding/pairing/Bluetooth) until the

@@ -211,6 +211,11 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val current = Destination.forRoute(currentRoute)
     var showMoreSheet by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
+    // The Updates inbox sheet (opened by the Today header bell). The store is a process singleton so
+    // the Today cards and the import path post to the same inbox this sheet renders.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val updateStore = remember { UpdateStore.from(context) }
+    var showUpdatesInbox by remember { mutableStateOf(false) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -365,6 +370,10 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         // The quick-action "+" lives in the Today header's top-right now (off the
                         // bottom bar) — it opens the same quick-action sheet the bar used to.
                         onQuickActions = { showQuickActions = true },
+                        // The Updates "ringer" — the bell sits between the Support heart and the +,
+                        // and opens the inbox sheet AppRoot presents (it owns the nav for deep-links).
+                        updateStore = updateStore,
+                        onOpenUpdates = { showUpdatesInbox = true },
                     )
                 }
                 composable(Destination.Live.route) {
@@ -532,6 +541,36 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         )
                     }
                 }
+            }
+        }
+
+        // The Updates inbox (opened by the Today header bell). Presented here so it has the nav for
+        // deep-links — a row's "trends" key switches the bottom tab, mirroring the iOS NavRouter route.
+        if (showUpdatesInbox) {
+            ModalBottomSheet(
+                onDismissRequest = { showUpdatesInbox = false },
+                containerColor = Palette.surfaceRaised,
+                contentColor = Palette.textPrimary,
+            ) {
+                UpdatesInboxScreen(
+                    store = updateStore,
+                    onClose = { showUpdatesInbox = false },
+                    onDeepLink = { key ->
+                        // Map the inbox deep-link key to a route (only known keys route). "trends" is
+                        // the one real poster's target today; unknown keys just close the sheet.
+                        val route = when (key) {
+                            "trends" -> Destination.Trends.route
+                            else -> null
+                        }
+                        if (route != null && route != currentRoute) nav.navigateTopLevel(route)
+                    },
+                    onRestore = { cardId ->
+                        // Flip the shared dismissed flag back off so the card reappears, and signal a
+                        // mounted Today to re-read it immediately (SharedPreferences isn't reactive).
+                        TodayCardDismissal.setDismissed(context, cardId, false)
+                        updateStore.restoreRequest = cardId
+                    },
+                )
             }
         }
     }
