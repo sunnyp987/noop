@@ -79,10 +79,13 @@ jobs:
           test -d "$app"
           Tools/anonymize-ios-app.sh "$app"
           stage="build/ios-stage"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          rm -rf "$stage"
           mkdir -p "$stage/Payload"
-          cp -R "$app" "$stage/Payload/"
+          ditto "$app" "$stage/Payload/NOOP.app"
           rm -rf "$stage/Payload/NOOP.app/Watch"
-          (cd "$stage" && zip -qry "$GITHUB_WORKSPACE/dist/NOOP-v${VERSION}-ios.ipa" Payload)
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$stage/Payload" "$GITHUB_WORKSPACE/dist/NOOP-v${VERSION}-ios.ipa"
+          ls -lh "$GITHUB_WORKSPACE/dist/NOOP-v${VERSION}-ios.ipa"
 
       - name: Upload Apple artifacts
         uses: actions/upload-artifact@v4
