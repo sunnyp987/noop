@@ -2,7 +2,7 @@
 
 All notable changes to NOOP. NOOP is an independent, experimental project — not the WHOOP app, and
 not affiliated with WHOOP. It reads a strap you own, on your own device, fully offline. Dates are
-approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/releases) page.
+approximate; downloads are on the [Releases](https://github.com/ParthJadhav/noop/releases) page.
 
 ## What to expect
 
@@ -356,10 +356,10 @@ Credit to @ujix for the `.noopbak` backup-export fix.
 
 ## 5.2.6 — updates check GitHub again (all platforms)
 
-NOOP's repo is back on **GitHub** (it's the canonical home again; noop.fans stays as a mirror). This points the app back at it.
+NOOP's repo is back on **GitHub** as the canonical home. This points the app back at it.
 
-- **"Check for updates" reads from GitHub again.** During the GitHub outage the in-app update check was temporarily pointed at the self-hosted home; it now reads `api.github.com/repos/NoopApp/noop/releases/latest` again — where releases live. Still on-device, still only when you tap, nothing about you is sent.
-- **Settings → About "project home & source"** links to github.com/NoopApp/noop again. (AltStore and Homebrew already pull updates from GitHub releases.)
+- **"Check for updates" reads from GitHub again.** During the GitHub outage the in-app update check was temporarily pointed at the self-hosted home; it now reads `api.github.com/repos/ParthJadhav/noop/releases/latest` again — where releases live. Still on-device, still only when you tap, nothing about you is sent.
+- **Settings → About "project home & source"** links to github.com/ParthJadhav/noop again. (AltStore and Homebrew already pull updates from GitHub releases.)
 
 ## 5.2.5 — WHOOP 5/MG re-pairing fix (iPhone & Mac)
 
@@ -644,7 +644,7 @@ unit-tested with Swift↔Kotlin parity locked across macOS, iOS and Android.
 
 ## 4.6.1 — NOOP has a new home (all platforms)
 
-- **NOOP now lives at [noop.fans](https://noop.fans/NoopApp/noop).** After the project's GitHub was
+- **NOOP now lives at [noop.fans](https://noop.fans/ParthJadhav/noop).** After the project's GitHub was
   taken offline, NOOP moved to its own independent home — code, releases, the wiki and issues.
   **Settings → About** now links straight there, and **Check for updates** reads from the new home (if
   GitHub ever comes back it will be kept as a mirror). Nothing on your device changed and everything
@@ -816,18 +816,18 @@ A fix release following a full code review of the v4 line.
 
 - **Today's Effort now updates live through the day.** The Effort ring recomputes over today's heart rate
   as it happens (midnight → now), instead of showing yesterday's completed-day value — or a stale 0.0 early
-  in the morning — until the next full re-score. Thanks @rad182 ([#402](https://github.com/NoopApp/noop/issues/402)).
+  in the morning — until the next full re-score. Thanks @rad182 ([#402](https://github.com/ParthJadhav/noop/issues/402)).
 - **Editing a sleep time can't scramble the night any more.** The wake picker keeps the night on its own
   day, so correcting a bed/wake time re-derives that night's stages cleanly instead of splitting the
   corrected block and its totals across two days. Resting-HR + HRV day-bucketing was also aligned across
-  Mac, iPhone and Android. Thanks @ujix ([#406](https://github.com/NoopApp/noop/issues/406)).
+  Mac, iPhone and Android. Thanks @ujix ([#406](https://github.com/ParthJadhav/noop/issues/406)).
 - **Late nights and long lie-ins are captured** — the sleep-detection window was widened so a wake after
-  noon isn't cut short. Thanks @ujix ([#425](https://github.com/NoopApp/noop/pull/425)).
+  noon isn't cut short. Thanks @ujix ([#425](https://github.com/ParthJadhav/noop/pull/425)).
 - **Smart alarm is now honestly flagged experimental.** The strap acknowledges the alarm, but a
   strap-driven wake hasn't been verified firing yet — on WHOOP 4.0 *or* 5/MG — so the app asks you to keep
-  a backup alarm while we confirm the exact firmware buzz pattern. Thanks Kaliarti ([#428](https://github.com/NoopApp/noop/issues/428)).
+  a backup alarm while we confirm the exact firmware buzz pattern. Thanks Kaliarti ([#428](https://github.com/ParthJadhav/noop/issues/428)).
 - **Android: rename your WHOOP's Bluetooth name** — brings Android up to the iPhone/Mac feature. Thanks
-  @cbarrado ([#422](https://github.com/NoopApp/noop/pull/422)).
+  @cbarrado ([#422](https://github.com/ParthJadhav/noop/pull/422)).
 - **Polish from the review:** your Vitality breakdown now reconciles exactly with the Body Age number it
   explains; the new Age cards always compute on Android (the age control is bounded like iPhone/Mac);
   renaming no longer spins forever if your strap doesn't answer; live workout detection now covers the
@@ -1465,7 +1465,7 @@ A large batch of fixes from reported issues and community contributions.
   affordance, blocked file selection in the iOS Files picker). iOS now offers only the file types it can
   actually open, so the `.zip` is selectable again. Thanks @adrnxq. (#179)
 - **New (iPhone):** an **AltStore / SideStore source** for one-tap updates on sideloaded installs — add
-  `https://raw.githubusercontent.com/NoopApp/noop/main/altstore-source.json` as a source. Reimplemented
+  `https://raw.githubusercontent.com/ParthJadhav/noop/main/altstore-source.json` as a source. Reimplemented
   from @RazvanRex. (#178)
 
 ## 2.6.2 — iPhone button-label polish
@@ -1501,7 +1501,7 @@ A large batch of fixes from reported issues and community contributions.
   one button, only when the strap is **worn and bonded**. It does write to the strap, but it's
   **reversible** (it only changes which data the strap emits) and is the same thing the official app does.
   Experimental: it may do nothing on your firmware yet. If you own a 5/MG, turning it on and sharing your
-  strap log on [#174](https://github.com/NoopApp/noop/issues/174) is exactly what we need to finish 5.0/MG
+  strap log on [#174](https://github.com/ParthJadhav/noop/issues/174) is exactly what we need to finish 5.0/MG
   support. **iPhone/Android only** — a Mac can't write to a 5/MG. Built on the public protocol work of
   **judes.club**, **Asherlc/dofek** and **b-nnett/goose**.
 
@@ -1513,7 +1513,7 @@ A large batch of fixes from reported issues and community contributions.
   blocks showed only one — the rest were silently hidden. All blocks are now read from **both** sources,
   and a split day reads as **one night**: totals summed, the real gap between blocks preserved in the
   hypnogram, the "N nights ago" label counting days (not blocks), and a cross-midnight night showing its
-  span ("Fri 13 → Sat 14 Jun"). Implemented from [PR #173](https://github.com/NoopApp/noop/pull/173) —
+  span ("Fri 13 → Sat 14 Jun"). Implemented from [PR #173](https://github.com/ParthJadhav/noop/pull/173) —
   thanks **@FrostDev7**. (Android's day totals were already correct; its per-day grouping follows.)
 
 ---
@@ -2497,7 +2497,7 @@ killed standard-0x2A37 live HR).
 ## 1.40 — Check for updates (both platforms)
 
 - **New: a manual "Check for updates" button** in Settings → About. One user-initiated GET to the
-  PUBLIC GitHub releases API (`api.github.com/repos/NoopApp/noop/releases/latest`) — compares the
+  PUBLIC GitHub releases API (`api.github.com/repos/ParthJadhav/noop/releases/latest`) — compares the
   `tag_name` to the installed version and, if newer, shows a Download button that opens the release
   page; otherwise "You're on the latest." Graceful failure on offline/rate-limit. **No background
   polling, no auto-update, nothing about the user is sent** — it only runs on tap, and only reads a

@@ -17,7 +17,7 @@ import kotlin.math.sqrt
  * shipped [SleepStager] (V1) rather than replacing it. V1 stays the default and is UNTOUCHED.
  *
  * Byte-identical-logic Kotlin twin of StrandAnalytics/SleepStagerV2.swift, itself reimplemented clean from
- * the contributor recipe in NoopApp/noop PR #600 (sunny-noop). We took only the per-session STAGING engine,
+ * the contributor recipe in ParthJadhav/noop PR #600 (sunny-noop). We took only the per-session STAGING engine,
  * not the CLI runner the PR shipped with it. Session DETECTION (the in-bed [start, end] spans) still comes
  * entirely from V1 — this file only re-stages a window someone already decided is sleep, so it is a true
  * drop-in for [SleepStager.stageSession]: SAME signature, SAME List<StageSegment> return shape.

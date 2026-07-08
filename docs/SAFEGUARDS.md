@@ -26,11 +26,11 @@ When replying across many issues/PRs (e.g. a board sweep), vary the wording and/
 **4. Throttle automated API activity.**
 Batch API operations; don't burst-create commits, issues, or comments. Stats badges (`refresh-stats-badges.py`) write to the working tree and ride the normal commit — they no longer push a burst of API commits.
 
-**5. GitHub Actions stays OFF.**
-We build and verify **centrally/locally**, so we don't need CI runners. Actions is disabled on the repo (`gh api -X PUT repos/NoopApp/noop/actions/permissions -F enabled=false`). This removes the "unusual Actions volume" flag vector and the supply-chain exposure of third-party actions. Re-enable only deliberately, and SHA-pin every `uses:` if you do.
+**5. Keep GitHub Actions narrow and intentional.**
+Actions is enabled for build/test verification and release artifacts only. Avoid workflows that post comments, open issues, or create frequent automated releases. Keep API activity low, prefer manual `workflow_dispatch` for release publishing, and review any third-party `uses:` before adding it.
 
-**6. Keep the mirror.**
-`noop.fans` remains a permanent live mirror (`git push origin` pushes to both; `Tools/release.sh` releases to both). If GitHub ever flags us again, the project is still fully available, and we appeal — calmly, on the facts above.
+**6. Keep recoverability simple.**
+Clone the repository locally before releases and keep release artifacts attached to GitHub Releases. If GitHub ever flags the repository again, appeal calmly on the facts above instead of evading the suspension or creating replacement accounts.
 
 ## If it happens again
 Don't evade or create replacement accounts (that makes a suspension permanent and violates the rules). Appeal at support.github.com with the facts: NOOP reads a device the user owns, offline, no account/cloud/credentials, no proprietary code — there is nothing to violate. The appeal worked once; the facts haven't changed.

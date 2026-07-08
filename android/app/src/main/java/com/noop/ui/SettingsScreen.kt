@@ -1982,8 +1982,7 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
                     StatePill("v${BuildConfig.VERSION_NAME}", tone = StrandTone.Neutral, showsDot = false)
                 }
 
-                // Project home — NOOP's code, releases, issues and wiki live on GitHub
-                // (canonical; noop.fans is kept as a mirror).
+                // Project home — NOOP's code, releases, issues and wiki live on GitHub.
                 val projectHomeInteraction = remember { MutableInteractionSource() }
                 Box(
                     modifier = Modifier
@@ -1996,11 +1995,11 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
                             interactionSource = projectHomeInteraction,
                             indication = null,
                         ) {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/NoopApp/noop"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ParthJadhav/noop"))
                             try {
                                 context.startActivity(intent)
                             } catch (_: ActivityNotFoundException) {
-                                Toast.makeText(context, "github.com/NoopApp/noop", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "github.com/ParthJadhav/noop", Toast.LENGTH_LONG).show()
                             }
                         }
                         .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -2010,40 +2009,6 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
                         Text("Project home & source", style = NoopType.body, color = Palette.textPrimary)
                         Text(
                             "GitHub: code, releases, issues and the wiki.",
-                            style = NoopType.caption,
-                            color = Palette.textTertiary,
-                        )
-                    }
-                }
-
-                // Mirror — noop.fans carries every release alongside GitHub, so users have a
-                // fallback if GitHub is ever unreachable (#606). Same downloads, release for release.
-                val mirrorInteraction = remember { MutableInteractionSource() }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .liquidPress(mirrorInteraction)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Palette.accent.copy(alpha = 0.10f))
-                        .border(1.dp, Palette.accent.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
-                        .clickable(
-                            interactionSource = mirrorInteraction,
-                            indication = null,
-                        ) {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://noop.fans"))
-                            try {
-                                context.startActivity(intent)
-                            } catch (_: ActivityNotFoundException) {
-                                Toast.makeText(context, "noop.fans", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                        .semantics { contentDescription = "Mirror at noop.fans, a fallback if GitHub is down" },
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Mirror: noop.fans", style = NoopType.body, color = Palette.textPrimary)
-                        Text(
-                            "Every release, mirrored. A fallback if GitHub is ever down.",
                             style = NoopType.caption,
                             color = Palette.textTertiary,
                         )
