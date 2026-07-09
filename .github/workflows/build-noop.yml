@@ -1,0 +1,73 @@
+name: Build NOOP iOS (sideload IPA)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest available Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app && xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # NOOP's own CI does this before building the iOS scheme: the app target
+      # embeds a companion watchOS app (NOOPWatch), and embedding an Apple Watch
+      # app in a build that isn't installed the normal Xcode-managed way is a
+      # known rough edge for sideloading. Their own workflow strips this exact
+      # dependency line before building "for sideload" — mirroring that here
+      # rather than discovering the same problem the hard way.
+      - name: Strip NOOPWatch dependency for a sideload-safe build
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("project.yml")
+          text = path.read_text()
+          needle = "\n      - target: NOOPWatch\n"
+          if needle not in text:
+              raise SystemExit("NOOPWatch dependency not found in project.yml — check for upstream changes")
+          path.write_text(text.replace(needle, "\n", 1))
+          PY
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Compile check (catches errors cheaply before the slower archive step)
+        run: >-
+          xcodebuild -scheme NOOPiOS -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          build | xcpretty && exit ${PIPESTATUS[0]}
+
+      - name: Archive for a real device (still unsigned)
+        run: >-
+          xcodebuild archive
+          -scheme NOOPiOS
+          -configuration Release
+          -archivePath build/NOOP.xcarchive
+          -sdk iphoneos
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_REQUIRED=NO
+          AD_HOC_CODE_SIGNING_ALLOWED=YES
+          | xcpretty && exit ${PIPESTATUS[0]}
+
+      - name: Package the .ipa (Payload/NOOP.app zipped)
+        run: |
+          cd build
+          mkdir Payload
+          cp -r NOOP.xcarchive/Products/Applications/NOOP.app Payload/
+          zip -r NOOP.ipa Payload
+
+      - name: Upload .ipa as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NOOP-ipa
+          path: build/NOOP.ipa
