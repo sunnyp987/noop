@@ -148,13 +148,38 @@ public func extractHistoricalStreams(_ parsed: [ParsedFrame],
         // absolute floor OR, when the strap's GET_DATA_RANGE markers are known, by sitting months outside
         // the strap's OWN banked window (wandering-clock pollution that clears the absolute floor). Counted
         // once per session via `droppedImplausible` so a bad-clock strap is visible in the diag/strap-log seam.
-        guard isPlausibleHistoricalUnix(candidate, wallNow: wallNow,
-                                        sessionOldestUnix: sessionOldestUnix,
-                                        sessionNewestUnix: sessionNewestUnix) else {
-            droppedImplausible += 1
-            return nil
+        if isPlausibleHistoricalUnix(candidate, wallNow: wallNow,
+                                     sessionOldestUnix: sessionOldestUnix,
+                                     sessionNewestUnix: sessionNewestUnix) {
+            return candidate
         }
-        return candidate
+        // NEW: per-record embedded-future-clock recovery. The correction above only fires when the
+        // LIVE (device,wall) clock CORRELATION itself is stale (`clockOffset` large) — but some straps
+        // (long-dormant / previously-owned units whose RTC relatched to a wrong future epoch) embed a
+        // directly-corrupted future timestamp inside EACH type-47 record's own `unix` field while the
+        // live GET_CLOCK correlation still reads perfectly normal (clockOffset ~0). That earlier branch
+        // is a no-op there, so `candidate` above is just the untouched, still-future-dated `rawTs`.
+        //
+        // When the strap's OWN reported newest-banked marker (sessionNewestUnix, from GET_DATA_RANGE)
+        // is ITSELF implausibly far in the future, that gives us a real, measured skew for this exact
+        // session: subtract it before giving up on the record. Snapped to the same 5-min grid as the
+        // stale-clock path above for the same reason (rows dedupe by (deviceId, ts); an un-snapped
+        // offset would duplicate every row on a re-sync).
+        //
+        // Validated against the ABSOLUTE floor only (2-arg isPlausibleHistoricalUnix), never the
+        // session-relative window — sessionOldestUnix/sessionNewestUnix are themselves corrupted by
+        // this exact bug (that's why we're in this fallback at all), so checking the recovered,
+        // now-correct timestamp against them would be circular and would reject good data.
+        if let newest = sessionNewestUnix, newest > wallNow + FUTURE_MARGIN {
+            let impliedSkew = newest - wallNow
+            let snappedSkew = (impliedSkew + snapGranularity / 2) / snapGranularity * snapGranularity
+            let recovered = candidate - snappedSkew
+            if isPlausibleHistoricalUnix(recovered, wallNow: wallNow) {
+                return recovered
+            }
+        }
+        droppedImplausible += 1
+        return nil
     }
     // #547: how many records this chunk dropped for an implausible ts. Surfaced to the Backfiller via
     // `Streams.droppedImplausible` so the strap log can show a bad-clock strap (observability only).
