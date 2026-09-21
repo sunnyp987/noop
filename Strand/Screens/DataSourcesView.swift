@@ -11,6 +11,9 @@ struct DataSourcesView: View {
     @EnvironmentObject var live: LiveState
     @State private var showingImporter = false
     @State private var importTarget: ImportTarget = .whoop
+    // Surfaces a file-picker failure to the user (#179 follow-up): the handler previously only
+    // NSLog'd this, which reads as "import does nothing" with zero visible cause.
+    @State private var pickerErrorMessage: String?
     // Nutrition CSV import state — local to this screen (the import is a quick, self-contained
     // metric-series write; it doesn't need AppModel's heavyweight import pipeline).
     @State private var nutritionImporting = false
@@ -115,6 +118,17 @@ struct DataSourcesView: View {
             Button("Remove", role: .destructive) { deleteAppleHealthData() }
         } message: {
             Text("This permanently deletes everything imported from Apple Health: heart rate, HRV, sleep, steps, workouts and more. Your live strap data is untouched. This can't be undone.")
+        }
+        // #179 follow-up: the file picker itself (not the import) can fail — wrong permissions, an
+        // undownloaded iCloud placeholder that still errors, a cancelled system dialog reporting an
+        // error instead of a plain cancellation. Surface it so "nothing happened" always has a reason.
+        .alert("Couldn't open that file", isPresented: Binding(
+            get: { pickerErrorMessage != nil },
+            set: { if !$0 { pickerErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { pickerErrorMessage = nil }
+        } message: {
+            Text(pickerErrorMessage ?? "")
         }
     }
 
@@ -304,8 +318,10 @@ struct DataSourcesView: View {
             handlePickedURL(url, for: target)
         case .failure(let error):
             // Surface the failure instead of swallowing it (#179) — a silent return read as
-            // "import does nothing", with no clue why.
+            // "import does nothing", with no clue why. The NSLog alone (the original #179 fix)
+            // is invisible in a shipped build; an alert is the actual user-visible surface.
             NSLog("Import: file picker failed for \(target) — \(error.localizedDescription)")
+            pickerErrorMessage = error.localizedDescription
         }
     }
 

@@ -414,6 +414,13 @@ struct TodayView: View {
     // the ring shows (never a second store read) plus the folded Readiness, so the sheet can never disagree
     // with the ring. A calibrating night (empty drivers) taps through to the EXISTING calibration countdown.
     @State private var showChargeBreakdown = false
+    /// Mirrors `showChargeBreakdown` for the Effort/Rest ring taps (see `heroRingColumn`'s `onRingTap`).
+    @State private var showRestBreakdown = false
+    @State private var showEffortBreakdown = false
+    /// Time-in-zone for the Effort breakdown sheet, loaded lazily via `.task` when the sheet opens (unlike
+    /// Charge/Rest, this needs the day's raw HR stream, not just the already-loaded `DailyMetric` row, so
+    /// it can't be a pure derived property). nil before load / when there's no HR for the day.
+    @State private var effortBreakdownZones: TimeInZone?
 
     // S4: the Synthesis card collapses to a single one-liner that expands on tap. Default collapsed so the
     // home screen stays tight; the live content (#506) is unchanged, only the chrome folds. @State (not
@@ -668,6 +675,36 @@ struct TodayView: View {
     /// `RecoveryScorer.skinTempRelative` (no recompute) so it reads identically to the Intelligence screen.
     private var chargeSkinTempRel: SkinTempRelative? {
         RecoveryScorer.skinTempRelative(deviationC: chargeBreakdownRow?.skinTempDevC)
+    }
+
+    // MARK: Rest breakdown drivers (mirrors the Charge breakdown above)
+
+    /// Rest is scored from the SAME night Charge is, so it reuses the same carry-over row (`lastScoredRecoveryDay
+    /// ?? displayDay`) rather than a separate selector — a night that's still "last night's" Charge is also
+    /// still "last night's" Rest.
+    private var restBreakdownRow: DailyMetric? { chargeBreakdownRow }
+
+    /// Personal sleep need (h): mean total sleep across history, floored at 7.5h. Mirrors SleepView's
+    /// `sleepNeedMin` exactly so the breakdown's "Duration" term agrees with what the Sleep tab shows,
+    /// not a hardcoded population default.
+    private var restBreakdownNeedHours: Double {
+        let mins = repo.days.compactMap { $0.totalSleepMin }.filter { $0 > 0 }
+        guard !mins.isEmpty else { return AnalyticsEngine.Rest.defaultNeedHours }
+        return max(7.5, (mins.reduce(0, +) / Double(mins.count)) / 60.0)
+    }
+
+    /// The ordered "what shaped it" Rest drivers for the displayed row. Pure derivation, no second store
+    /// read — same honesty contract as `chargeDrivers`. Consistency is omitted here (nil -> the driver
+    /// shows "not enough nights yet" rather than a recomputed regularity figure the ring itself doesn't use).
+    private var restDrivers: [ChargeDriver] {
+        guard let row = restBreakdownRow else { return [] }
+        return AnalyticsEngine.Rest.drivers(daily: row, needHours: restBreakdownNeedHours)
+    }
+
+    private var restBreakdownConfidence: ScoreConfidence {
+        let row = restBreakdownRow
+        return ScoreConfidence.rest(hasSession: (row?.totalSleepMin ?? 0) > 0,
+                                    hasStagedSleep: (row?.deepMin ?? 0) > 0 || (row?.remMin ?? 0) > 0)
     }
 
     /// #205 (one-word readiness read kept on the hero: Push / Maintain / Rest). PURE mapping of the
@@ -1407,6 +1444,8 @@ struct TodayView: View {
         // A1 (#514/#706): the Charge breakdown, opened by tapping the Today hero Charge ring. The body
         // builds lazily here (#819 lag) from the drivers DERIVED off the displayed row (never a second read).
         .sheet(isPresented: $showChargeBreakdown) { chargeBreakdownSheet }
+        .sheet(isPresented: $showRestBreakdown) { restBreakdownSheet }
+        .sheet(isPresented: $showEffortBreakdown) { effortBreakdownSheet }
         // Honour a "Restore to Today" tap from the inbox: flip the matching dismissed flag back so the
         // card reappears (the inbox also clears the @AppStorage key directly, but this covers an
         // already-mounted Today). Cleared once handled.
@@ -1852,6 +1891,186 @@ struct TodayView: View {
                 #endif
             }
         }
+    }
+
+    // MARK: Rest breakdown sheet (the Rest-ring tap target)
+
+    /// The sheet opened by tapping the Today hero Rest ring. Mirrors `chargeBreakdownSheet`'s shape (same
+    /// `ChargeBreakdownSection` component, reused since Rest's driver list is the same shape) but skips the
+    /// Readiness fold-in, which is Charge-specific.
+    @ViewBuilder
+    private var restBreakdownSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                    let drivers = restDrivers
+                    if drivers.isEmpty {
+                        chargeBreakdownEmptyNote
+                    } else {
+                        NoopCard(padding: 18, tint: StrandPalette.restColor) {
+                            ChargeBreakdownSection(drivers: drivers, confidence: restBreakdownConfidence)
+                        }
+                    }
+                    NavigationLink {
+                        ScoringGuideView(initialSection: .rest, onClose: { showRestBreakdown = false })
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "function")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(StrandPalette.restColor)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("How Rest is calculated")
+                                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
+                                Text("The method behind the score, not today's values.")
+                                    .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(StrandPalette.textTertiary)
+                        }
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(StrandPalette.surfaceInset))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("How Rest is calculated. The method behind the score.")
+                }
+                .padding(NoopMetrics.screenPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(StrandPalette.surfaceBase.ignoresSafeArea())
+            .navigationTitle("What shaped your Rest")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                #if os(iOS)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showRestBreakdown = false }
+                        .foregroundStyle(StrandPalette.accent)
+                }
+                #else
+                ToolbarItem {
+                    Button("Done") { showRestBreakdown = false }
+                        .foregroundStyle(StrandPalette.accent)
+                }
+                #endif
+            }
+        }
+    }
+
+    // MARK: Effort breakdown sheet (the Effort-ring tap target)
+
+    /// The sheet opened by tapping the Today hero Effort ring: a time-in-zone breakdown, since Effort/strain
+    /// is a continuous integral over HR-zone-time, not a small set of named weighted terms like Charge/Rest
+    /// (so it doesn't fit `ChargeBreakdownSection`'s point-delta shape). Unlike the Charge/Rest sheets this
+    /// needs the day's raw HR stream, which isn't part of the already-loaded `DailyMetric` row, so it loads
+    /// lazily via `.task` when the sheet opens rather than being a pure derived property.
+    @ViewBuilder
+    private var effortBreakdownSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                    if let zones = effortBreakdownZones, zones.total > 0 {
+                        NoopCard(padding: 18, tint: StrandPalette.strainColor(50)) {
+                            VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
+                                Text("Time in zone").strandOverline()
+                                VStack(spacing: NoopMetrics.rowSpacing) {
+                                    ForEach(1...5, id: \.self) { zone in
+                                        effortZoneRow(zone: zone, seconds: zones.seconds(inZone: zone),
+                                                     totalSeconds: zones.total)
+                                    }
+                                }
+                            }
+                        }
+                    } else if effortBreakdownZones != nil {
+                        chargeBreakdownEmptyNote
+                    } else {
+                        ProgressView().frame(maxWidth: .infinity, minHeight: 120)
+                    }
+                    NavigationLink {
+                        ScoringGuideView(initialSection: .effort, onClose: { showEffortBreakdown = false })
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "function")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(StrandPalette.strainColor(50))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("How Effort is calculated")
+                                    .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
+                                Text("The method behind the score, not today's values.")
+                                    .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(StrandPalette.textTertiary)
+                        }
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(StrandPalette.surfaceInset))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("How Effort is calculated. The method behind the score.")
+                }
+                .padding(NoopMetrics.screenPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(StrandPalette.surfaceBase.ignoresSafeArea())
+            .navigationTitle("What shaped your Effort")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                #if os(iOS)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showEffortBreakdown = false }
+                        .foregroundStyle(StrandPalette.accent)
+                }
+                #else
+                ToolbarItem {
+                    Button("Done") { showEffortBreakdown = false }
+                        .foregroundStyle(StrandPalette.accent)
+                }
+                #endif
+            }
+        }
+        .task(id: displayDay?.day) {
+            effortBreakdownZones = await loadEffortZoneBreakdown()
+        }
+    }
+
+    /// One "Zone N: Xm (Y%)" row for the Effort breakdown, tinted along the same strain ramp the ring uses.
+    private func effortZoneRow(zone: Int, seconds: Double, totalSeconds: Double) -> some View {
+        let minutes = Int((seconds / 60).rounded())
+        let pct = totalSeconds > 0 ? seconds / totalSeconds : 0
+        return HStack(spacing: 10) {
+            Text("Zone \(zone)")
+                .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
+                .frame(width: 60, alignment: .leading)
+            LiquidTube(frac: pct, tint: StrandPalette.strainColor(Double(zone) * 20), height: 8, animated: false)
+            Text(minutes > 0 ? "\(minutes)m" : "—")
+                .font(StrandFont.captionNumber).foregroundStyle(StrandPalette.textSecondary)
+                .frame(width: 44, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Fetches the displayed day's raw HR stream (local midnight to next local midnight, matching the same
+    /// window Effort/strain itself is computed over) and grids it into HR zones via the profile's max HR.
+    /// A day with no HR returns an EMPTY TimeInZone (all-zero), not nil, so the sheet can distinguish
+    /// "still loading" (nil) from "loaded, nothing recorded" (empty) and show the honest empty note.
+    private func loadEffortZoneBreakdown() async -> TimeInZone {
+        guard let dayKey = displayDay?.day,
+              let start = Self.dayParser.date(from: dayKey) else {
+            return TimeInZone(seconds: [0, 0, 0, 0, 0], belowZone1: 0)
+        }
+        let startTs = Int(start.timeIntervalSince1970)
+        let endTs = startTs + 86_400
+        let hr = await repo.hrSamples(from: startTs, to: endTs)
+        let zoneSet = HRZones.zones(maxHR: Double(profile.hrMax))
+        return HRZones.timeInZone(hr, zoneSet: zoneSet)
     }
 
     /// The honest fallback when the Charge ring is tapped but there is no value AND no running calibration
@@ -2552,8 +2771,14 @@ struct TodayView: View {
                            onRingTap: { showChargeBreakdown = true }) {
                 chargeRing(score: score, d: d, diameter: ring)
             }
-            heroRingColumn(section: .effort, domain: .effort) { effortRing(d: d, diameter: ring) }
-            heroRingColumn(section: .rest, domain: .rest, provenanceKey: "sleep_performance") { restRing(diameter: ring) }
+            heroRingColumn(section: .effort, domain: .effort,
+                           onRingTap: { showEffortBreakdown = true }) {
+                effortRing(d: d, diameter: ring)
+            }
+            heroRingColumn(section: .rest, domain: .rest, provenanceKey: "sleep_performance",
+                           onRingTap: { showRestBreakdown = true }) {
+                restRing(diameter: ring)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .center)
         // Zero-impact width reader: a clear background that publishes the row's width up via preference. It

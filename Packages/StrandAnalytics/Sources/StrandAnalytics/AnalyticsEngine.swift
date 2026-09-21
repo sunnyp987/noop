@@ -802,6 +802,76 @@ public enum AnalyticsEngine {
                              needHours: needHours, consistency: consistency,
                              deepSeconds: deepSec)
         }
+
+        /// The ordered "what shaped it" driver list for the Rest composite — one row per named component
+        /// (Duration / Efficiency / Restorative sleep / Consistency), mirroring `ChargeDrivers.swift`'s
+        /// shape so the UI can render both with the same `ChargeDriver`-based section. Unlike Charge's
+        /// logistic marginal attribution, Rest's composite is a plain weighted sum, so each term's
+        /// `deltaPoints` is simply its own weighted contribution in points (weight × sub-score × 100) —
+        /// no "neutral" subtraction needed, since the terms don't interact. Returns `[]` when there's no
+        /// sleep at all (mirrors `composite(daily:)`'s nil gate), so a cold night never shows fabricated
+        /// rows. Order is fixed (duration, efficiency, restorative, consistency) since all four terms are
+        /// always present once there's sleep — there's no "missing input" case for Rest the way Charge has.
+        public static func drivers(daily d: DailyMetric, needHours: Double = defaultNeedHours,
+                                   consistency: Double? = nil) -> [ChargeDriver] {
+            guard let tstMin = d.totalSleepMin, tstMin > 0, let eff = d.efficiency else { return [] }
+            let tstSec = tstMin * 60.0
+            let deepSec = (d.deepMin ?? 0) * 60.0
+            let restorativeSec = deepSec + (d.remMin ?? 0) * 60.0
+            func clamp01(_ x: Double) -> Double { max(0.0, min(1.0, x)) }
+
+            let needSeconds = max(needHours, 0.1) * 3600.0
+            let durationScore = clamp01(tstSec / needSeconds)
+            let efficiencyScore = clamp01(eff)
+            let deepFactor: Double = {
+                guard tstSec > 0, deepShareTarget > 0 else { return 1.0 }
+                let adequacy = clamp01((deepSec / tstSec) / deepShareTarget)
+                return deepFloorFactor + (1.0 - deepFloorFactor) * adequacy
+            }()
+            let restorativeScore = tstSec > 0
+                ? clamp01((restorativeSec / tstSec) / restorativeTarget) * deepFactor
+                : 0.0
+            let hasConsistency = consistency != nil
+            let consistencyScore = clamp01(consistency ?? neutralConsistency)
+
+            func pts(_ weight: Double, _ score: Double) -> Int { Int((weight * score * 100).rounded()) }
+
+            var out: [ChargeDriver] = []
+            out.append(ChargeDriver(
+                label: "Duration",
+                deltaPoints: pts(wDuration, durationScore),
+                valueText: "\(Int(tstSec / 60)) of \(Int(needSeconds / 60)) min",
+                baselineText: "your personal need",
+                verdict: durationScore >= 0.95 ? "met your need, supporting Rest"
+                    : durationScore >= 0.7 ? "under your need, holding Rest back"
+                    : "well under your need, limiting Rest"))
+            out.append(ChargeDriver(
+                label: "Efficiency",
+                deltaPoints: pts(wEfficiency, efficiencyScore),
+                valueText: "\(Int((eff * 100).rounded()))%",
+                baselineText: "of time in bed asleep",
+                verdict: efficiencyScore >= 0.9 ? "a settled night, supporting Rest"
+                    : efficiencyScore >= 0.75 ? "some restlessness, holding Rest back"
+                    : "a broken night, limiting Rest"))
+            out.append(ChargeDriver(
+                label: "Restorative sleep",
+                deltaPoints: pts(wRestorative, restorativeScore),
+                valueText: tstSec > 0 ? "\(Int(((restorativeSec / tstSec) * 100).rounded()))% deep + REM" : "0%",
+                baselineText: "of a \(Int(restorativeTarget * 100))% target",
+                verdict: restorativeScore >= 0.9 ? "plenty of deep + REM, supporting Rest"
+                    : restorativeScore >= 0.6 ? "a bit light on deep + REM"
+                    : "short on deep + REM, limiting Rest"))
+            out.append(ChargeDriver(
+                label: "Consistency",
+                deltaPoints: pts(wConsistency, consistencyScore),
+                valueText: hasConsistency ? "\(Int((consistencyScore * 100).rounded()))%" : "not enough nights yet",
+                baselineText: "bed/wake regularity",
+                verdict: !hasConsistency ? "not counted yet"
+                    : consistencyScore >= 0.8 ? "steady bed/wake times, supporting Rest"
+                    : consistencyScore >= 0.5 ? "somewhat irregular timing"
+                    : "irregular bed/wake times, limiting Rest"))
+            return out
+        }
     }
 
     /// Round to 2 decimal places (matches the imported/demo skin-temp deviation precision).
