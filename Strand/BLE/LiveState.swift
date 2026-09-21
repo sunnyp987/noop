@@ -497,10 +497,10 @@ public final class LiveState: ObservableObject {
     /// scheduled export can read the last day's lines even with no live BLE session open. Small and
     /// bounded: capped to the tail (`tailLimit`, well under `maxLogLines`) of short redacted strings, so
     /// the persisted blob stays a few hundred KB at most. On-device only; nothing is sent anywhere.
-    private static let tailKey = "strapLog.tail"
+    nonisolated private static let tailKey = "strapLog.tail"
     /// How many recent lines the durable tail retains — a sensible day's worth for a scheduled export,
     /// smaller than the live `maxLogLines` ring so the persisted copy stays modest.
-    static let tailLimit = 2_000
+    nonisolated static let tailLimit = 2_000
 
     /// Mirror the most recent `tailLimit` lines to UserDefaults (called from `append`). Synchronous and
     /// cheap (a single small array write); UserDefaults coalesces the disk flush. `nonisolated` (touches
