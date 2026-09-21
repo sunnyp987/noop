@@ -228,9 +228,9 @@ final class WatchSessionBridge: NSObject, ObservableObject {
     }
 
     /// The key the encoded snapshot rides under inside the application context dictionary.
-    static let contextKey = "snapshot"
+    nonisolated static let contextKey = "snapshot"
     /// The message key the watch sends on launch to ask for the latest snapshot right now.
-    static let requestLatestKey = "requestLatest"
+    nonisolated static let requestLatestKey = "requestLatest"
 }
 
 // MARK: - WCSessionDelegate

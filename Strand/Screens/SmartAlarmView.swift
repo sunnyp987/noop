@@ -27,7 +27,7 @@ struct SmartAlarmView: View {
     @State private var perDayOn = WindDownNudge.hasPerDayOverrides
     @State private var overrides: [Int: Int] = WindDownNudge.perDayWakeOverrides
     /// Calendar weekday numbers laid out Monday-first (Mon…Sun → 2,3,4,5,6,7,1), matching AutomationsView.
-    private static let weekdayOrder = [2, 3, 4, 5, 6, 7, 1]
+    nonisolated private static let weekdayOrder = [2, 3, 4, 5, 6, 7, 1]
 
     var body: some View {
         // #766: retitled to "Alarms" because it now holds BOTH the strap's silent wake-alarm and the

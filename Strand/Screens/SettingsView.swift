@@ -247,17 +247,21 @@ struct SettingsView: View {
             title: "Profile photo",
             blurb: "Optional. Add a photo for the avatar in the top-left. Stored only on \(Platform.deviceNounPhrase). Baseline is offline, so it's never uploaded."
         ) {
+            // Hoisted once: PhotosPicker's label closure is Sendable-checked on newer SDKs, and reading a
+            // main-actor-isolated computed property (profile.hasAvatar) from inside it fails that check.
+            // Capturing a plain Bool here instead sidesteps that without changing behavior.
+            let hasAvatar = profile.hasAvatar
             HStack(spacing: 16) {
                 ProfileAvatarView(imageData: profile.avatarImageData, size: 64)
-                    .accessibilityLabel(profile.hasAvatar ? "Your profile photo" : "No profile photo set")
+                    .accessibilityLabel(hasAvatar ? "Your profile photo" : "No profile photo set")
 
                 VStack(alignment: .leading, spacing: NoopMetrics.space2) {
                     PhotosPicker(selection: $avatarPickerItem, matching: .images) {
-                        Text(profile.hasAvatar ? "Change photo" : "Choose photo")
+                        Text(hasAvatar ? "Change photo" : "Choose photo")
                     }
                     .buttonStyle(NoopButtonStyle(.secondary, fullWidth: true))
 
-                    if profile.hasAvatar {
+                    if hasAvatar {
                         Button("Remove photo") { profile.clearAvatar() }
                             .buttonStyle(NoopButtonStyle(.tertiary, fullWidth: true))
                             .accessibilityHint("Reverts to the default profile icon")

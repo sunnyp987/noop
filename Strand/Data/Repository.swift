@@ -440,9 +440,11 @@ final class Repository: ObservableObject {
 
     /// Canonical source ids the resolver knows how to cross-reference. The strap's actual id is
     /// `deviceId` (and its computed sibling `deviceId + "-noop"`); these are the FIXED ids.
-    static let whoopSource = "my-whoop"
-    static let appleHealthSource = "apple-health"
-    static let healthConnectSource = "health-connect"
+    // nonisolated: fixed string ids referenced from several nonisolated contexts (e.g.
+    // AppleWatchDevice's static device-id constants); immutable, so nonisolated access is safe.
+    nonisolated static let whoopSource = "my-whoop"
+    nonisolated static let appleHealthSource = "apple-health"
+    nonisolated static let healthConnectSource = "health-connect"
 
     /// Imported wearable-export sources whose DAILY aggregates (HRV / resting HR / sleep) can be scored
     /// for a Baseline Charge/Rest on an import-only day, exactly like a live day (#823). These carry no raw HR
