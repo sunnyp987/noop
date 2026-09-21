@@ -75,6 +75,12 @@ struct SleepView: View {
     /// (honest empty state for older rows whose `motionJSON` is NULL). Refreshed with `allSessions`.
     @State private var motionByStart: [Int: [Double]] = [:]
 
+    /// Persisted per-epoch CONFIDENCE series (honesty-by-construction) keyed by each session's detected
+    /// `startTs`. Same loading/sourcing rule as `motionByStart`: a block with no stored series stays absent
+    /// (an older row scored before this existed, or one too sparse to grid) — never a fabricated all-1.0
+    /// array. Laid alongside the hypnogram so a gap-filled stretch reads differently from a measured one.
+    @State private var confidenceByStart: [Int: [Double]] = [:]
+
     /// Draw-in fraction for the Rest hero gauge — owned here so the gauge animates the arc on appear /
     /// when the sleep-performance score changes, exactly as TodayView drives its rings. Presentation-only.
     @State private var heroFraction: Double = 0
@@ -184,6 +190,7 @@ struct SleepView: View {
                 // Per-epoch motion for every block (#407), keyed by detected start. mergeDay reads only the
                 // already-resolved group's entries — this just pre-fetches them all so the model build is sync.
                 motionByStart = await repo.sessionMotions(starts: allSessions.map { $0.startTs })
+                confidenceByStart = await repo.sessionConfidences(starts: allSessions.map { $0.startTs })
                 nightOffset = 0
                 navNight = nil
                 modelKey = dataKey
@@ -228,7 +235,7 @@ struct SleepView: View {
             .sheet(item: $addNap) { seed in
                 SleepTimeEditor(bedTs: seed.bedTs, wakeTs: seed.wakeTs,
                                 title: "Add a nap",
-                                blurb: "Pick when the nap started and ended. NOOP stages it from your data as its own session, separate from the night's sleep.",
+                                blurb: "Pick when the nap started and ended. Baseline stages it from your data as its own session, separate from the night's sleep.",
                                 bedLabel: "Nap started", wakeLabel: "Nap ended") { startTs, endTs in
                     await repo.addManualNap(startTs: startTs, endTs: endTs)
                     // Re-score so the day's aggregates pick up the new session, exactly like an edit.
@@ -290,7 +297,7 @@ struct SleepView: View {
         // tombstone, so only it gets the "won't detect ... again" wording. (#65 banner honesty.)
         let message = banner.snapshot.session.userEdited
             ? String(localized: "Sleep deleted.")
-            : String(localized: "Sleep deleted. NOOP won't detect sleep between \(clockTime(banner.displayStart)) and \(clockTime(banner.windowEnd)) again.")
+            : String(localized: "Sleep deleted. Baseline won't detect sleep between \(clockTime(banner.displayStart)) and \(clockTime(banner.windowEnd)) again.")
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: "moon.zzz")
                 .font(.system(size: 14, weight: .semibold))
@@ -332,7 +339,7 @@ struct SleepView: View {
     /// sleep-performance score — the canonical liquid `LiquidVessel` in the Rest tint with the score
     /// counting up over it (the SAME hero language Today's score cells and the Trends headline use);
     /// otherwise a big SF-Rounded hours-slept headline over the same backdrop. A `SourceBadge` states
-    /// whether the score is WHOOP's own imported figure or NOOP's on-device estimate. Presentation-only
+    /// whether the score is WHOOP's own imported figure or Baseline's on-device estimate. Presentation-only
     /// — the number comes straight from the existing `model.performance.latest` / hours computation.
     @ViewBuilder
     private func restHero(_ model: SleepModel) -> some View {
@@ -409,7 +416,7 @@ struct SleepView: View {
         }
     }
 
-    /// Whether the night's sleep-performance score is WHOOP's own imported figure or NOOP's
+    /// Whether the night's sleep-performance score is WHOOP's own imported figure or Baseline's
     /// on-device approximation — so the hero is honest about provenance, like Today's badges.
     private func sleepScoreSource(_ model: SleepModel) -> LocalizedStringKey {
         if let lastDay = repo.days.last?.day, repo.importedSleep[lastDay]?.performancePct != nil {
@@ -423,7 +430,7 @@ struct SleepView: View {
     /// The REAL per-day merge winner for the DISPLAYED night's sleep numbers, as the same brand wording the
     /// By-Day badge / Today / Intelligence use ("On-device" / "Whoop"). A WHOOP export covering the night's
     /// wake-day wins the dashboard merge (imports win field-by-field, Repository.mergeDaily), so the badge
-    /// says "Whoop"; otherwise the night was scored on-device by NOOP. Keyed by the night's LOCAL wake-day
+    /// says "Whoop"; otherwise the night was scored on-device by Baseline. Keyed by the night's LOCAL wake-day
     /// (the `mergeSleep` / importer convention, sleep is filed under the day you woke), so a navigated past
     /// night reads its OWN provenance, not last night's. Honest: never a blanket "on-device". Apple Health
     /// carries no sleep into `importedSleep`, so the sleep merge winner is only ever Whoop vs on-device. (C4)
@@ -635,11 +642,16 @@ struct SleepView: View {
                 tint: StrandPalette.restColor,
                 chart: {
                     if intervals.count >= 2 {
+                        // Confidence epochs are gridded from each fragment's detected `startTs`, same as
+                        // `intervals`' `effectiveStartTs` in the common (unedited) case where the two are
+                        // equal — a user-adjusted wake/bed time can drift the strip by the edit's size,
+                        // an acceptable imprecision for an honesty signal, not a fabricated value.
                         Hypnogram(intervals: intervals,
                                   height: NoopMetrics.chartHeight,
                                   showsStageAxis: true,
                                   nightStart: night.onsetDate,
-                                  showsTimeAxis: true)
+                                  showsTimeAxis: true,
+                                  confidence: night.confidenceEpochs)
                     } else {
                         stageBar(s)
                     }
@@ -974,7 +986,7 @@ struct SleepView: View {
                 .font(StrandFont.captionNumber)
                 .foregroundStyle(color)
                 .frame(width: 38, alignment: .leading)
-            // The NOOP signature: a segmented PipBar that counts up to the share-of-night fraction,
+            // The Baseline signature: a segmented PipBar that counts up to the share-of-night fraction,
             // tinted in the stage colour over the canonical inset track. Flat, crisp, no glow.
             PipBar(value: fraction * 100, segments: 20, tint: color, height: 8)
             Text(durationText(minutes))
@@ -1560,6 +1572,10 @@ struct SleepView: View {
         // (`startTs`, not `effectiveStartTs`) is the motion store's key. A fragment with no persisted series
         // contributes nothing; if NO fragment has one, `motionEpochs` stays empty → honest empty state.
         var motion: [Double] = []
+        // Laid the SAME way as `motion`: fragment-by-fragment, off the already-resolved group. A fragment
+        // with no persisted confidence contributes nothing; if NO fragment has one, `confidence` stays
+        // empty → the hypnogram simply draws no strip, never a fabricated all-solid one.
+        var confidence: [Double] = []
         for frag in group {
             if let seg = decodeSegments(frag.stagesJSON, sessionStart: frag.effectiveStartTs), seg.stages.total > 0 {
                 stages.awake += seg.stages.awake; stages.light += seg.stages.light
@@ -1572,6 +1588,7 @@ struct SleepView: View {
                 stages.deep  += st.deep;  stages.rem   += st.rem
             }
             if let m = motionByStart[frag.startTs] { motion.append(contentsOf: m) }
+            if let c = confidenceByStart[frag.startTs] { confidence.append(contentsOf: c) }
         }
         guard stages.asleep > 0 else { return nil }
         let eff = stages.total > 0 ? stages.asleep / stages.total : nil
@@ -1579,7 +1596,7 @@ struct SleepView: View {
                                        restingHr: nil, avgHrv: nil, stagesJSON: nil)
         let realSegs = segs.count >= 2 ? segs.sorted { $0.start < $1.start } : nil
         return Night(session: synth, stages: stages, realSegments: realSegs, sourceBlocks: sessions,
-                     motionEpochs: motion, habitualMidsleepSec: habitualMidsleepSec)
+                     motionEpochs: motion, confidenceEpochs: confidence, habitualMidsleepSec: habitualMidsleepSec)
     }
 
     /// The real stored blocks composing the day at `offset` (for the stage-less stub Night, so its edit
@@ -2218,6 +2235,12 @@ private struct Night {
     /// This is read off the already-resolved group, NOT a re-resolution of the night.
     var motionEpochs: [Double] = []
 
+    /// Per-epoch CONFIDENCE (honesty-by-construction) for the MAIN-night GROUP, laid the same way
+    /// `motionEpochs` is — fragment-by-fragment, in the SAME order `intervals` lays the stage timeline.
+    /// Empty when no group fragment has a persisted `confidenceJSON` (older rows, scored before this
+    /// existed), so the hypnogram simply draws no confidence strip rather than a fabricated all-solid one.
+    var confidenceEpochs: [Double] = []
+
     /// The LEARNED habitual midsleep (local time-of-day seconds) the owning view loaded for the user — the
     /// SAME value the engine threaded into the daily total — so `editTarget` resolves the SAME main block
     /// the hero and the analytics rollup did, for a shift/late sleeper too. nil = cold-start band. (#547)
@@ -2545,7 +2568,7 @@ private struct SleepTimeEditor: View {
             // A detected night is tombstoned so it won't re-detect; a userEdited/nap row writes no
             // tombstone, so its copy drops that (false) promise. Mirrors the undo banner. (#65)
             Text(suppressesReDetection
-                 ? "Removes this recorded sleep and recomputes the day without it. NOOP won't re-detect sleep in this window. You can undo for a few seconds after."
+                 ? "Removes this recorded sleep and recomputes the day without it. Baseline won't re-detect sleep in this window. You can undo for a few seconds after."
                  : "Removes this sleep and recomputes the day without it. You can undo for a few seconds after.")
         }
     }

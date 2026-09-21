@@ -212,7 +212,7 @@ struct HRVSnapshotView: View {
     }
 
     private var dialUnit: String {
-        phase == .idle ? "RMSSD" : "MS RMSSD"
+        phase == .idle ? "HRV" : "MS HRV"
     }
 
     private var instruction: String {

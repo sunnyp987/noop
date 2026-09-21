@@ -1,5 +1,5 @@
 //  LiveSessionView.swift
-//  NOOP · Live Sessions (silent guardian) — the in-session screen + summary sheet.
+//  Baseline · Live Sessions (silent guardian) — the in-session screen + summary sheet.
 //
 //  Deliberately near-empty: one breathing ring, one line of intent, one honest Charge
 //  sentence that fades, an End button. The ring is the whole language — lit teal and

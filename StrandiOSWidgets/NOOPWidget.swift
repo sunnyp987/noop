@@ -69,7 +69,7 @@ struct NOOPWidgetView: View {
         var parts: [String] = []
         if let r = snap.recovery { parts.append("Charge \(r)%") }
         if let b = snap.bpm { parts.append("\(b) bpm") }
-        return parts.isEmpty ? "NOOP" : parts.joined(separator: " · ")
+        return parts.isEmpty ? "Baseline" : parts.joined(separator: " · ")
     }
 
     private var recoveryGauge: some View {
@@ -98,7 +98,7 @@ struct NOOPWidgetView: View {
     private var home: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("NOOP").font(.system(size: 13, weight: .bold))
+                Text("Baseline").font(.system(size: 13, weight: .bold))
                     .foregroundStyle(StrandPalette.textSecondary)
                 Spacer()
                 Circle().fill(snap.bonded ? StrandPalette.statusPositive : StrandPalette.statusCritical)
@@ -133,7 +133,7 @@ struct NOOPWidgetView: View {
     private var large: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("NOOP").font(.system(size: 13, weight: .bold))
+                Text("Baseline").font(.system(size: 13, weight: .bold))
                     .foregroundStyle(StrandPalette.textSecondary)
                 Spacer()
                 Circle().fill(snap.bonded ? StrandPalette.statusPositive : StrandPalette.statusCritical)
@@ -197,7 +197,7 @@ struct NOOPWidget: Widget {
                     .background(StrandPalette.surfaceBase)
             }
         }
-        .configurationDisplayName("NOOP Charge")
+        .configurationDisplayName("Baseline Charge")
         .description("Charge, Effort, Rest, HRV, resting and live heart rate, and strap battery at a glance.")
         .supportedFamilies([
             .systemSmall, .systemMedium, .systemLarge,

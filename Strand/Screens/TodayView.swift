@@ -265,7 +265,7 @@ struct TodayView: View {
     // Component 4, the REAL per-day merge winner (provenance) for the selected day's derived scores,
     // keyed by metric key ("recovery" / "sleep_performance"); the value is the raw source id the resolver
     // returned (e.g. "my-whoop", "my-whoop-noop", "apple-health"). Resolved once per load via
-    // `resolvedSeries` (the same imported-WHOOP > NOOP-computed > Apple-Health precedence the dashboard
+    // `resolvedSeries` (the same imported-WHOOP > Baseline-computed > Apple-Health precedence the dashboard
     // merge uses), so a provenance badge reflects which source actually supplied that day's number rather
     // than a blanket "on-device" claim. Absent until loaded / when a day has no value. (spec 2026-06-20)
     @State private var provenanceByMetric: [String: String] = [:]
@@ -289,7 +289,7 @@ struct TodayView: View {
     // used to anchor the recovery marker at wake time (WHOOP-style Overview HR annotations).
     @State private var sleepToday: CachedSleepSession?
 
-    // TODAY's in-progress Effort (NOOP 0–100 axis), recomputed over the day's HR (local-midnight→now)
+    // TODAY's in-progress Effort (Baseline 0–100 axis), recomputed over the day's HR (local-midnight→now)
     // each load so the gauge tracks today as it accumulates rather than waiting on the heavy daily pass
     // to persist, which early in the day would otherwise surface yesterday's completed Effort or a stale
     // 0.0 (#402). nil below StrainScorer.minReadings (we then fall back to the stored daily row) and on
@@ -734,7 +734,7 @@ struct TodayView: View {
     }
 
     /// PURE mapper (unit-testable), a raw resolver source id onto the spec's provenance labels, given
-    /// the strap's real `deviceId`. The NOOP-computed strap sibling (`deviceId + "-noop"`) reads
+    /// the strap's real `deviceId`. The Baseline-computed strap sibling (`deviceId + "-noop"`) reads
     /// "On-device" (scored on THIS device from the raw strap stream); the imported strap source
     /// (`deviceId`, normally "my-whoop") reads "Whoop"; the Apple-Health source reads "Apple Health".
     /// Any other real source (Mi Band, Health Connect, nutrition) keeps its `FusionSource.displayName`
@@ -757,7 +757,7 @@ struct TodayView: View {
         }
     }
 
-    // MARK: Apple Watch provenance (M1): "the watch is the sensor, NOOP is the brain"
+    // MARK: Apple Watch provenance (M1): "the watch is the sensor, Baseline is the brain"
 
     /// True when the selected day's value for `metricKey` was supplied by the Apple-Health source (a
     /// watch-only user's Charge/Rest). The store source stays `apple-health` so the engines and the
@@ -1366,8 +1366,8 @@ struct TodayView: View {
                         .foregroundStyle(StrandPalette.metricRose)
                         .attentionWiggle(period: 4)
                 }
-                .help("Support NOOP: help and contact")
-                .accessibilityLabel("Support NOOP: help and contact")
+                .help("Support Baseline: help and contact")
+                .accessibilityLabel("Support Baseline: help and contact")
             }
             // The Updates "ringer" on the TRAILING (top-right) edge, separated from the heart (iOS hosts
             // it in the compact top bar instead).
@@ -1543,7 +1543,7 @@ struct TodayView: View {
                         .foregroundStyle(StrandPalette.metricRose)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Support NOOP")
+                        Text("Support Baseline")
                             .font(StrandFont.headline)
                             .foregroundStyle(StrandPalette.textPrimary)
                         Text("Help, contact, and attribution.")
@@ -1561,7 +1561,7 @@ struct TodayView: View {
         }
         // Press-down feedback for the full-card button surface.
         .buttonStyle(StrandPressableButtonStyle())
-        .accessibilityLabel("Support NOOP: help and contact")
+        .accessibilityLabel("Support Baseline: help and contact")
     }
     #endif
 
@@ -2487,7 +2487,7 @@ struct TodayView: View {
     /// rounded to a whole percent. nil until there are enough banked HRV nights to form a stable
     /// baseline (mirrors the recovery seed gate), the insight then falls back to the state word.
     ///
-    /// STOPGAP (#696): NOOP mixes HRV measurement methods on the shared `avgHrv` field,     /// strap/WHOOP-CSV HRV is RMSSD (~20-100 ms) while Apple-Health-imported HRV is SDNN
+    /// STOPGAP (#696): Baseline mixes HRV measurement methods on the shared `avgHrv` field,     /// strap/WHOOP-CSV HRV is RMSSD (~20-100 ms) while Apple-Health-imported HRV is SDNN
     /// (~100-200 ms). With no method awareness, an SDNN reading (e.g. an Oura ring's 176 ms)
     /// compared against an RMSSD baseline (~57 ms) yields a physiologically-impossible delta
     /// (+209%) and renders the alarming "210% over baseline" headline. Genuine night-to-night
@@ -2760,7 +2760,7 @@ struct TodayView: View {
         .frame(width: diameter, height: diameter)
     }
 
-    /// The effective Effort strain (NOOP 0–100 axis) the gauge shows. For TODAY this prefers the live
+    /// The effective Effort strain (Baseline 0–100 axis) the gauge shows. For TODAY this prefers the live
     /// in-progress value computed over the day's HR (midnight→now) in `loadAll`, so the gauge reflects
     /// the accumulating day rather than the last persisted daily row, which only refreshes when the
     /// heavy daily pass runs, so early in the day the stored row is yesterday's Effort or a stale 0.0
@@ -2768,7 +2768,7 @@ struct TodayView: View {
     /// (StrainScorer.minReadings). Navigated past days always use the stored row.
     private func effortStrain(_ d: DailyMetric?) -> Double? {
         #if DEBUG
-        // DEBUG promo harness: pin Effort (NOOP 0–100 axis) to the active frame's value. This single
+        // DEBUG promo harness: pin Effort (Baseline 0–100 axis) to the active frame's value. This single
         // point feeds the hero ring AND every Effort read-out, so they stay consistent. No-op when no
         // `--demo-hour` frame is active. Charge/Rest are intentionally left at their seeded values.
         if let f = DemoDayHarness.active { return f.effort }
@@ -2798,14 +2798,14 @@ struct TodayView: View {
     }
 
     /// Strain value to feed the Effort gauge, on the SELECTED display scale (#313). The effective
-    /// `strain` is on NOOP's 0–100 Effort axis; `UnitFormatter.effortValue` converts it to the
+    /// `strain` is on Baseline's 0–100 Effort axis; `UnitFormatter.effortValue` converts it to the
     /// user's chosen scale (0–100 native, or ×21/100 down to WHOOP's 0–21) so the arc + number
     /// match the rest of the app's Effort read-outs. Pairs with `effortGaugeMax` for the "of N".
     private func effortGaugeValue(_ d: DailyMetric?) -> Double? {
         effortStrain(d).map { UnitFormatter.effortValue($0, scale: effortScale) }
     }
 
-    /// The Effort gauge's scale maximum, 100 on NOOP's native axis, 21 on the WHOOP axis. Drives
+    /// The Effort gauge's scale maximum, 100 on Baseline's native axis, 21 on the WHOOP axis. Drives
     /// the arc fraction and the gauge's "of N" caption so both follow the toggle (#313).
     private var effortGaugeMax: Double { effortScale == .whoop ? 21 : 100 }
 
@@ -3023,7 +3023,7 @@ struct TodayView: View {
         }
     }
 
-    /// "Charge" marker (NOOP's name for recovery) at wake time (sleep end), else at the window start.
+    /// "Charge" marker (Baseline's name for recovery) at wake time (sleep end), else at the window start.
     /// Hidden while calibrating.
     private var recoveryMarker: OverviewHRChart.EdgeMarker? {
         guard let rec = displayDay?.recovery else { return nil }
@@ -3452,7 +3452,7 @@ struct TodayView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Data sources")
-        .accessibilityHint("Show what NOOP is synced from")
+        .accessibilityHint("Show what Baseline is synced from")
     }
 
     /// PURE: the "Synced from: …" summary string for the collapsed footer (S5). Names the sources with
@@ -3508,7 +3508,7 @@ struct TodayView: View {
     }
 
     /// H6, the small ⚙︎ on an ESTIMATED Steps tile that opens the steps-calibration sheet. A WHOOP 4.0
-    /// strap doesn't transmit steps, so NOOP estimates them from motion calibrated to the phone's count;
+    /// strap doesn't transmit steps, so Baseline estimates them from motion calibrated to the phone's count;
     /// this puts the "tune that estimate" entry right where the user reads the "est." caption.
     private var stepsCalibrationButton: some View {
         Button {
@@ -3897,7 +3897,7 @@ struct TodayView: View {
         restScore = restScoreLocal
 
         // Component 4, resolve the REAL per-day merge winner for the selected day's derived scores. The
-        // cross-source resolver applies the SAME imported-WHOOP > NOOP-computed > Apple-Health precedence
+        // cross-source resolver applies the SAME imported-WHOOP > Baseline-computed > Apple-Health precedence
         // the dashboard merge uses, returning the source that actually supplied each day's value, so the
         // provenance badge reflects the truth (computed vs imported), never a blanket "on-device". Keyed by
         // metric so the Charge ring and Rest tile each badge their own winner.

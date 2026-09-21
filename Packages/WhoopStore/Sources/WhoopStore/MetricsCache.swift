@@ -270,6 +270,53 @@ extension WhoopStore {
         }
     }
 
+    // MARK: - Per-epoch confidence + persisted sleep metrics (v23: honesty-by-construction)
+    //
+    // Same shape and rationale as the v18 pair above: banked on the EXISTING sleepSession row beside
+    // `stagesJSON`/`motionJSON`/`sleepStateJSON`, an absent signal stays SQL NULL, never a fabricated
+    // series or zero.
+
+    /// Persist the SleepStager's per-epoch CONFIDENCE (0...1) for one session, as a compact JSON array on
+    /// the same 30 s epoch grid as `stagesJSON`/`motionJSON`. Keyed by the immutable detected key
+    /// (deviceId, startTs). Passing an EMPTY array clears the column to NULL. Returns rows changed.
+    @discardableResult
+    public func persistSessionConfidence(deviceId: String, sessionStart: Int, confidenceEpochs: [Double]) async throws -> Int {
+        let json = confidenceEpochs.isEmpty ? nil : Self.encodeDoubleArray(confidenceEpochs)
+        return try syncWrite { db in
+            try db.execute(sql: """
+                UPDATE sleepSession SET confidenceJSON = ?
+                WHERE deviceId = ? AND startTs = ?
+                """, arguments: [json, deviceId, sessionStart])
+            return db.changesCount
+        }
+    }
+
+    /// The persisted per-epoch confidence for one session, or nil when the column is NULL / the session
+    /// doesn't exist / the JSON is unparseable (absent stays absent). Keyed by detected startTs.
+    public func sessionConfidence(deviceId: String, sessionStart: Int) async throws -> [Double]? {
+        try syncRead { db in
+            let json = try String.fetchOne(db, sql: """
+                SELECT confidenceJSON FROM sleepSession WHERE deviceId = ? AND startTs = ?
+                """, arguments: [deviceId, sessionStart])
+            return json.flatMap(Self.decodeDoubleArray)
+        }
+    }
+
+    /// Persist the sleep-onset latency (seconds), wake-after-sleep-onset (seconds), and wake-bout count
+    /// `hypnogramMetrics` derives for one session, so a later trend/consistency read doesn't need to
+    /// re-run the stager. Keyed by detected startTs. Returns rows changed.
+    @discardableResult
+    public func persistSleepQualityMetrics(deviceId: String, sessionStart: Int,
+                                           latencySec: Int, wasoSec: Int, disturbanceCount: Int) async throws -> Int {
+        try syncWrite { db in
+            try db.execute(sql: """
+                UPDATE sleepSession SET latencySec = ?, wasoSec = ?, disturbanceCount = ?
+                WHERE deviceId = ? AND startTs = ?
+                """, arguments: [latencySec, wasoSec, disturbanceCount, deviceId, sessionStart])
+            return db.changesCount
+        }
+    }
+
     /// Compact JSON encoders/decoders for the per-epoch series — a bare `[Double]`/`[Int]` array (no
     /// pretty-printing) so the column stays small and round-trips byte-for-byte with the Android port.
     static func encodeDoubleArray(_ xs: [Double]) -> String? {

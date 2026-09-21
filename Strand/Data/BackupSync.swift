@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 /// Backup & Sync (folder destination) - the Apple twin of the Android `BackupSync`. Writes the full
 /// `.noopbak` snapshot (the existing `DataBackup` format) into a user-chosen folder, on demand and as
 /// an on-launch daily catch-up. Point that folder at a Google Drive / iCloud / Dropbox client and you
-/// get automatic off-device backup with no in-app cloud account - NOOP only writes a local file; the
+/// get automatic off-device backup with no in-app cloud account - Baseline only writes a local file; the
 /// sync client does the upload.
 ///
 /// `BackupSync` holds only the PURE, unit-tested filename / selection logic (no I/O, no state) so it is
@@ -264,7 +264,7 @@ enum FolderBackup {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = String(localized: "Choose")
-        panel.message = String(localized: "Choose a folder for NOOP backups (for example a Google Drive or iCloud folder).")
+        panel.message = String(localized: "Choose a folder for Baseline backups (for example a Google Drive or iCloud folder).")
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         saveFolder(url)
         return url

@@ -2,7 +2,7 @@ import SwiftUI
 import StrandDesign
 import StrandAnalytics
 
-/// Intelligence — NOOP's own recovery/strain/sleep scores, computed on-device from raw strap data
+/// Intelligence — Baseline's own recovery/strain/sleep scores, computed on-device from raw strap data
 /// using the WHOOP model shape. Makes the app independent of WHOOP's cloud for live-collected days.
 struct IntelligenceView: View {
     @EnvironmentObject var intelligence: IntelligenceEngine
@@ -23,7 +23,7 @@ struct IntelligenceView: View {
         // imported history, an eager VStack built every card up-front on the main thread and froze
         // the app when ALL was tapped (#345); LazyVStack only materialises what's on screen.
         ScreenScaffold(title: "Intelligence",
-                       subtitle: "NOOP scores your charge, effort and rest itself: on-device, no cloud.",
+                       subtitle: "Baseline scores your charge, effort and rest itself: on-device, no cloud.",
                        lazy: true,
                        // Liquid finish: the same full-bleed day-of-sky backdrop Today + the other liquid
                        // tabs carry, so Intelligence sits in one atmosphere. Static + non-interactive; the
@@ -198,7 +198,7 @@ struct IntelligenceView: View {
                         .accessibilityHidden(true)
                     Text("How this works").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
                 }
-                Text("Charge weighs your HRV against your personal baseline (~55%), resting heart rate (~20%), rest quality (~15%), respiration (~5%) and skin-temperature deviation (~5%). Effort is a 0-\(UnitFormatter.effortScaleMax(effortScale)) cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day NOOP collected raw streams.")
+                Text("Charge weighs your HRV against your personal baseline (~55%), resting heart rate (~20%), rest quality (~15%), respiration (~5%) and skin-temperature deviation (~5%). Effort is a 0-\(UnitFormatter.effortScaleMax(effortScale)) cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day Baseline collected raw streams.")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // The Charge model made concrete — the five weighted inputs, each its own metric accent.
@@ -261,8 +261,8 @@ struct IntelligenceView: View {
                     if d.recovery != nil {
                         ConfidenceTierChip(confidence: d.confidence)
                     }
-                    // The REAL source of the day's dashboard headline, not a hard-coded "NOOP-computed".
-                    // The By-Day numbers are always NOOP's on-device scores, but when an import covers the
+                    // The REAL source of the day's dashboard headline, not a hard-coded "Baseline-computed".
+                    // The By-Day numbers are always Baseline's on-device scores, but when an import covers the
                     // day it WINS the dashboard merge, so the badge says so ("Whoop" / "Apple Health") and
                     // a strap-scored night reads "On-device". Dynamic String → wrap in "\()" so it's shown
                     // verbatim, not looked up as a LocalizedStringKey (the String≠LocalizedStringKey
@@ -276,8 +276,10 @@ struct IntelligenceView: View {
                     stat(String(localized: "Effort"), d.strain.map { UnitFormatter.effortDisplay($0, scale: effortScale) } ?? "—",
                          d.strain.map { StrandPalette.strainColor($0) } ?? StrandPalette.textSecondary)
                     stat(String(localized: "Rest"), d.sleepMin.map { "\(Int($0 / 60))h \(Int($0.truncatingRemainder(dividingBy: 60)))m" } ?? "—", StrandPalette.restColor)
-                    stat("HRV", d.hrv.map { "\(Int($0.rounded()))" } ?? "—", StrandPalette.metricPurple)
-                    stat("RHR", d.rhr.map { "\($0)" } ?? "—", StrandPalette.metricRose)
+                    stat("HRV", d.hrv.map { "\(Int($0.rounded()))" } ?? "—", StrandPalette.metricPurple,
+                         accessibilityName: String(localized: "Heart rate variability"))
+                    stat("RHR", d.rhr.map { "\($0)" } ?? "—", StrandPalette.metricRose,
+                         accessibilityName: String(localized: "Resting heart rate"))
                 }
                 // Effort load meter (0–100) as a filling LiquidTube — the horizontal liquid vessel Today's
                 // Key Metrics + Sleep's stage bars use — tinted along the strain ramp so it reads as
@@ -302,12 +304,14 @@ struct IntelligenceView: View {
         }
     }
 
-    private func stat(_ label: String, _ value: String, _ color: Color) -> some View {
+    private func stat(_ label: String, _ value: String, _ color: Color, accessibilityName: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label.uppercased()).font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
             Text(value).font(StrandFont.number(20)).foregroundStyle(color).lineLimit(1).minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(accessibilityName ?? label) \(value)")
     }
 
 }

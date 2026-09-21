@@ -296,7 +296,7 @@ struct TestCentreView: View {
             await model.repo.refresh()
         }
         infoTitle = String(localized: "Charge baseline recalibrating")
-        infoMessage = String(localized: "NOOP will re-learn your baseline from tonight's data onward. Your history is kept, and it takes a few nights to settle.")
+        infoMessage = String(localized: "Baseline will re-learn your baseline from tonight's data onward. Your history is kept, and it takes a few nights to settle.")
         showInfo = true
     }
 
@@ -323,7 +323,7 @@ struct TestCentreView: View {
         if let url {
             infoTitle = String(localized: "Strap log exported")
             #if os(iOS)
-            infoMessage = String(localized: "Saved \(url.lastPathComponent) to NOOP's folder in the Files app.")
+            infoMessage = String(localized: "Saved \(url.lastPathComponent) to Baseline's folder in the Files app.")
             #else
             infoMessage = String(localized: "Saved \(url.lastPathComponent) to your Documents folder.")
             #endif

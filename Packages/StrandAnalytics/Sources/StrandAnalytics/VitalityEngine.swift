@@ -99,6 +99,9 @@ public enum VitalityEngine {
     /// Sleep regularity (0–1) from a window of nightly sleep durations (hours): 1 − coefficient of
     /// variation, clamped. A rough but honest on-device proxy for the Sleep Regularity Index when we only
     /// have durations, not full timing. Fewer than 3 nights → nil (not enough to judge).
+    /// Superseded by `bedWakeRegularity` wherever real bed/wake TIMESTAMPS are available (this duration-only
+    /// proxy can't tell "same 7.5h every night at wildly different clock times" from genuine regularity);
+    /// kept as the fallback for callers that only have durations.
     public static func sleepConsistency(nightlyHours: [Double]) -> Double? {
         let xs = nightlyHours.filter { $0 > 0 }
         guard xs.count >= 3 else { return nil }
@@ -107,6 +110,49 @@ public enum VitalityEngine {
         let variance = xs.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(xs.count)
         let cv = variance.squareRoot() / mean
         return clamp(1 - cv, 0, 1)
+    }
+
+    /// A night's clock spread beyond which bed/wake-TIME regularity scores zero credit (2 h). Roughly
+    /// matches the "outstanding <30 min / good <1 h / fair <2 h" bands several consumer sleep apps use for
+    /// bedtime/wake-time consistency.
+    static let regularityFullSpreadSeconds: Double = 2 * 60 * 60
+
+    /// The circular standard deviation (seconds-of-day) of a set of local time-of-day values (seconds since
+    /// local midnight, 0..<86400). Time-of-day is CIRCULAR — 23:50 and 00:10 are 20 minutes apart, not
+    /// ~23h40m — so a naive linear stddev would wrongly read a consistent late bedtime that straddles
+    /// midnight as wildly irregular. This maps each time to an angle on a 24 h circle and uses the standard
+    /// circular-statistics standard deviation (Fisher, *Statistical Analysis of Circular Data*, 1993):
+    /// mean resultant length `r` → circular SD `sqrt(-2 ln r)` radians, converted back to seconds-of-day.
+    /// `r == 0` (points uniformly spread / perfectly opposed) maps to the maximum possible spread (half a
+    /// day) rather than a `log(0)` trap.
+    static func circularStdDevSeconds(_ localSecondsOfDay: [Int]) -> Double {
+        guard !localSecondsOfDay.isEmpty else { return regularityFullSpreadSeconds }
+        let twoPi = 2 * Double.pi
+        let angles = localSecondsOfDay.map { twoPi * Double((($0 % 86_400) + 86_400) % 86_400) / 86_400 }
+        let n = Double(angles.count)
+        let sinSum = angles.reduce(0) { $0 + sin($1) }
+        let cosSum = angles.reduce(0) { $0 + cos($1) }
+        let r = sqrt(sinSum * sinSum + cosSum * cosSum) / n   // mean resultant length, [0,1]; 1 = no spread
+        guard r > 1e-9 else { return 86_400 / 2 }
+        let circularSDRadians = min(sqrt(-2 * log(r)), Double.pi)
+        return circularSDRadians / twoPi * 86_400
+    }
+
+    /// TRUE sleep-timing regularity (0–1) from local clock-time bed and wake times across recent nights —
+    /// the same idea WHOOP's own "Sleep Consistency" and Oura's Sleep Regularity Index are built on: how
+    /// steady your bed/wake CLOCK TIMES are, not just how long you slept. 1 = you go to bed and wake at
+    /// the same clock time every night; 0 = wildly irregular. Averages the bed-time and wake-time circular
+    /// spread, then maps 0 spread → 1.0 and `regularityFullSpreadSeconds` (2 h) or more spread → 0.0,
+    /// linear between. Each array is one entry per night, in local seconds-since-midnight (0..<86400) — the
+    /// caller resolves "which session is the night's main sleep" and converts to local time-of-day; this
+    /// function only does the circular statistics. Fewer than 3 nights of EITHER → nil (not enough to judge,
+    /// same floor as the duration-only `sleepConsistency`).
+    public static func bedWakeRegularity(bedTimesLocalSec: [Int], wakeTimesLocalSec: [Int]) -> Double? {
+        guard bedTimesLocalSec.count >= 3, wakeTimesLocalSec.count >= 3 else { return nil }
+        let bedSD = circularStdDevSeconds(bedTimesLocalSec)
+        let wakeSD = circularStdDevSeconds(wakeTimesLocalSec)
+        let avgSD = (bedSD + wakeSD) / 2
+        return clamp(1 - avgSD / regularityFullSpreadSeconds, 0, 1)
     }
 
     /// Compute the per-factor log-hazard contributions present in `inputs`. Each references a population

@@ -6,8 +6,8 @@ import StrandAnalytics
 
 /// On-device "intelligence": computes recovery / day-strain / sleep from the raw strap streams using
 /// the same model shape WHOOP uses (HRV vs personal baseline ~60%, resting HR ~20%, sleep ~15%,
-/// respiration ~5%; strain 0–21 from cardiovascular load). This is what makes NOOP independent of
-/// WHOOP's cloud , for any day the strap collected raw data with NOOP connected, NOOP scores it
+/// respiration ~5%; strain 0–21 from cardiovascular load). This is what makes Baseline independent of
+/// WHOOP's cloud , for any day the strap collected raw data with Baseline connected, Baseline scores it
 /// itself rather than relying on the values WHOOP computed in the imported CSV.
 @MainActor
 final class IntelligenceEngine: ObservableObject {
@@ -39,13 +39,13 @@ final class IntelligenceEngine: ObservableObject {
     /// re-pass; this mirrors it). Reset by any pass whose heal finds nothing, restoring the budget.
     private var healRearmedThisCycle = false
 
-    /// Who supplies the dashboard headline for a By-Day row. The By-Day card always shows NOOP's OWN
+    /// Who supplies the dashboard headline for a By-Day row. The By-Day card always shows Baseline's OWN
     /// on-device numbers, but the WHOLE-DASHBOARD value for the same day can come from an IMPORTED row
     /// that won the per-day merge (imports win field-by-field over computed , see Repository.mergeDaily).
     /// We resolve the REAL provenance so the card's badge tells a strap-scored night apart from an
-    /// imported one, instead of always claiming "NOOP-computed". (Sleep overhaul §2.6 honesty fix.)
+    /// imported one, instead of always claiming "Baseline-computed". (Sleep overhaul §2.6 honesty fix.)
     enum DaySource: Equatable {
-        /// NOOP scored this day itself from the raw strap streams; no import covers it.
+        /// Baseline scored this day itself from the raw strap streams; no import covers it.
         case computed
         /// A WHOOP export covers this day and wins the dashboard merge.
         case whoopImport
@@ -168,11 +168,11 @@ final class IntelligenceEngine: ObservableObject {
         return n % 2 == 1 ? s[n / 2] : (s[n / 2 - 1] + s[n / 2]) / 2
     }
 
-    /// The per-day RHR floor-vs-mean diagnostic line (#691). NOOP's `floor` is the WHOOP-style resting
+    /// The per-day RHR floor-vs-mean diagnostic line (#691). Baseline's `floor` is the WHOOP-style resting
     /// HR , the lowest SUSTAINED 5-min in-bed level (SleepStager picks the min 5-min rolling-mean HR per
     /// session, the day takes the .min() across them) , whereas a "sleeping HR" app reports the night MEAN
-    /// over the whole asleep span. The mean always sits at-or-above the floor, so NOOP reading lower is BY
-    /// DESIGN, not a bug; logging both makes a "NOOP RHR is lower than my other app" report explainable
+    /// over the whole asleep span. The mean always sits at-or-above the floor, so Baseline reading lower is BY
+    /// DESIGN, not a bug; logging both makes a "Baseline RHR is lower than my other app" report explainable
     /// from the strap log. `inBedBpms` is the bpm of every HR sample inside a matched in-bed session (the
     /// SAME span the floor came from, so the two numbers are directly comparable). Empty in-bed → nightMean
     /// is "nil". Counts/bpm only , no timestamps or PII. Pure so it's unit-tested directly and is the SAME
@@ -181,7 +181,7 @@ final class IntelligenceEngine: ObservableObject {
         let meanLog: String = inBedBpms.isEmpty ? "nil"
             : String(Int((Double(inBedBpms.reduce(0, +)) / Double(inBedBpms.count)).rounded()))
         return "rhr day=\(day) floor=\(floor) nightMean=\(meanLog) inBedSamples=\(inBedBpms.count) "
-            + "(floor = WHOOP-style lowest-sustained = NOOP RHR; mean = sleeping-HR-app number)"
+            + "(floor = WHOOP-style lowest-sustained = Baseline RHR; mean = sleeping-HR-app number)"
     }
 
     /// The Saturday on-or-before a "yyyy-MM-dd" local-day string , the weekly key Fitness Age writes to.
@@ -200,7 +200,7 @@ final class IntelligenceEngine: ObservableObject {
     static let effortRescoreFlagKey = "intelligence.effortRescore.v313.done"
 
     /// One-shot, on-upgrade FULL-history Effort rescore (#313 PART B). The Effort hero gauge + numbers
-    /// moved from the old 0–21 axis to NOOP's own 0–100 axis. On-device computed rows since v2.6.1
+    /// moved from the old 0–21 axis to Baseline's own 0–100 axis. On-device computed rows since v2.6.1
     /// already store 0–100, but rows the engine computed on an OLDER build (capped at `maxDays` per run,
     /// so deep history was never revisited) may still hold 0–21 strain.
     ///
@@ -360,13 +360,27 @@ final class IntelligenceEngine: ObservableObject {
                                              cfg: rhrCfg, baselineEpoch: Baselines.recoveryBaselineEpoch())
         let baselines1 = AnalyticsEngine.ProfileBaselines(hrv: hrvBase1, restingHR: rhrBase1)
 
+        // Personal sleep need (h): mean total sleep across the user's OWN history (same `hist` source as
+        // the HRV/RHR baselines above), floored at 7.5h so a chronically short sleeper's Rest-duration
+        // term and debt ledger don't read as permanently "on target". Mirrors SleepView's `sleepNeedMin`
+        // exactly — until this fix, `analyzeDay` below never received a `sleepNeedHours:` override despite
+        // the parameter existing and being documented as IntelligenceEngine's to refine, so every night was
+        // silently scored against the flat 8h population default while the Sleep tab's debt ledger and
+        // "hours vs needed" tiles already showed the personalized figure: the two silently disagreed.
+        let histSleepMins = hist.compactMap { $0.totalSleepMin }.filter { $0 > 0 }
+        let personalSleepNeedHours = histSleepMins.isEmpty ? AnalyticsEngine.Rest.defaultNeedHours
+            : max(7.5, (histSleepMins.reduce(0, +) / Double(histSleepMins.count)) / 60.0)
+
         // Keep each night's small result (daily metrics + sessions), NOT the raw streams , every field
         // except recovery is baseline-independent, so pass 2 only re-scores the cheap recovery
         // composite. The hr/rr/resp/gravity arrays go out of scope each iteration (memory stays bounded).
         var scoredNights: [(daily: DailyMetric, strain: Double?, cachedSleep: [CachedSleepSession],
                             workouts: [ExerciseSession], nightlySkin: Double?,
                             sessionMotion: [Int: [Double]],
-                            sessionSleepState: [Int: [Int]])] = []
+                            sessionSleepState: [Int: [Int]],
+                            sessionConfidence: [Int: [Double]],
+                            sessionLatency: [Int: Int], sessionWaso: [Int: Int],
+                            sessionDisturbance: [Int: Int])] = []
         // Nightly values harvested in pass 1, keyed by day, to seed the pass-2 baseline.
         var nightlyHrvByDay: [String: Double?] = [:]
         var nightlyRhrByDay: [String: Double?] = [:]
@@ -560,6 +574,7 @@ final class IntelligenceEngine: ObservableObject {
                                                      tzOffsetSeconds: tzOffset, wristOff: wristOff,
                                                      habitualMidsleepSec: habitualMidsleepSec,
                                                      bandSleepState: bandSleepState,
+                                                     sleepNeedHours: personalSleepNeedHours,
                                                      // #690: thread the V2 toggle into the NORMAL staging path so
                                                      // it affects detected nights, not just the self-heal restage.
                                                      useSleepStagerV2: useSleepStagerV2,
@@ -580,12 +595,12 @@ final class IntelligenceEngine: ObservableObject {
                         ticksPerStep: up.stepTicksPerStep)
                 }
                 // ── RHR floor-vs-mean diagnostic (#691) ────────────────────────────────────────────────
-                // Make the recurring "NOOP's resting HR reads LOWER than my sleeping-HR app" reports
+                // Make the recurring "Baseline's resting HR reads LOWER than my sleeping-HR app" reports
                 // explainable from the strap log instead of a guess. The two numbers measure different
-                // things BY DESIGN, not a bug: NOOP's `restingHr` is the WHOOP-style FLOOR (the lowest
+                // things BY DESIGN, not a bug: Baseline's `restingHr` is the WHOOP-style FLOOR (the lowest
                 // sustained 5-min in-bed level , SleepStager picks the min 5-min rolling-mean HR per session,
                 // and the day takes the .min() across them), whereas a "sleeping HR" app reports the night
-                // MEAN over the whole asleep span. The mean always sits above the floor, so NOOP looking
+                // MEAN over the whole asleep span. The mean always sits above the floor, so Baseline looking
                 // lower is correct. Log BOTH so a report ships proof of the gap. Mean is computed over the
                 // SAME matched in-bed span the floor came from (so they're directly comparable); a night
                 // with no banked floor (no matched sleep) logs nil and the line is skipped. Logging only ,
@@ -633,7 +648,11 @@ final class IntelligenceEngine: ObservableObject {
             scoredNights.append((daily: res.daily, strain: res.strain, cachedSleep: res.cachedSleep,
                                  workouts: res.workouts, nightlySkin: res.nightlySkinTempC,
                                  sessionMotion: res.sessionMotionByStart,
-                                 sessionSleepState: res.sessionSleepStateByStart))
+                                 sessionSleepState: res.sessionSleepStateByStart,
+                                 sessionConfidence: res.sessionConfidenceByStart,
+                                 sessionLatency: res.sessionLatencyByStart,
+                                 sessionWaso: res.sessionWasoByStart,
+                                 sessionDisturbance: res.sessionDisturbanceByStart))
         }
 
         // ── Seed the baseline from the UNION of imported nightly history + the values just computed.
@@ -895,7 +914,7 @@ final class IntelligenceEngine: ObservableObject {
         // own baseline with the SAME `watchRecoveries` engine the apple fold uses (which reuses
         // RecoveryScorer.recovery verbatim), then write the score under the COMPUTED ("-noop") source so it
         // merges onto Today exactly like a live day. The imported daily row keeps its raw values untouched;
-        // the computed row carries the NOOP-derived Charge + the Rest composite. HONEST DATA: the engine
+        // the computed row carries the Baseline-derived Charge + the Rest composite. HONEST DATA: the engine
         // returns nil + calibrating until the HRV baseline is usable, so an import-only day stays calibrating
         // rather than faking a number. The strap and a real WHOOP/Apple import keep winning , we skip any day
         // already scored this pass (`dailies`) or owned by a WHOOP/Apple import. The window matches the
@@ -975,11 +994,46 @@ final class IntelligenceEngine: ObservableObject {
         let vNights = fa7.compactMap { $0.totalSleepMin }.map { Double($0) / 60.0 }.filter { $0 > 0 }
         let vHRVs = fa7.compactMap { $0.avgHrv }
         let vSteps = fa7.compactMap { $0.steps }.map(Double.init)
+        // ── True bed/wake-TIME regularity (not just duration) ──────────────────────────────────────────
+        // For each day in the SAME fa7 window, pick the night's longest sleep session (mirrors the
+        // "sleep is filed under the wake day" convention used everywhere else) and convert its start/end
+        // to local clock-time-of-day, so `bedWakeRegularity` can score how STEADY the actual bed/wake
+        // clock times are — the same idea WHOOP's own Sleep Consistency and Oura's Sleep Regularity Index
+        // are built on, and a real upgrade over the old duration-only coefficient-of-variation proxy
+        // (two nights of identical LENGTH at wildly different clock times used to read as "regular").
+        let fa7Days = Set(fa7.map { $0.day })
+        var mainSessionByDay: [String: CachedSleepSession] = [:]
+        for night in scoredNights {
+            for sess in night.cachedSleep {
+                let day = AnalyticsEngine.dayString(sess.endTs, offsetSec: tzOffset)
+                guard fa7Days.contains(day) else { continue }
+                let dur = sess.endTs - sess.startTs
+                if let existing = mainSessionByDay[day] {
+                    if dur > (existing.endTs - existing.startTs) { mainSessionByDay[day] = sess }
+                } else {
+                    mainSessionByDay[day] = sess
+                }
+            }
+        }
+        func localTimeOfDaySeconds(_ ts: Int) -> Int { ((ts + tzOffset) % 86_400 + 86_400) % 86_400 }
+        let bedTimesLocalSec = mainSessionByDay.values.map { localTimeOfDaySeconds($0.startTs) }
+        let wakeTimesLocalSec = mainSessionByDay.values.map { localTimeOfDaySeconds($0.endTs) }
+        // Real timing-based regularity when there's enough of it; otherwise fall back to the old
+        // duration-only proxy rather than dropping the input (a sparse week still gets a rough signal).
+        let vSleepConsistency = VitalityEngine.bedWakeRegularity(bedTimesLocalSec: bedTimesLocalSec,
+                                                                 wakeTimesLocalSec: wakeTimesLocalSec)
+            ?? VitalityEngine.sleepConsistency(nightlyHours: vNights)
+        if let reg = vSleepConsistency {
+            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: newestDay)
+            _ = try? await store.upsertMetricSeries([
+                MetricPoint(day: satKey, key: "sleep_regularity", value: reg * 100)
+            ], deviceId: computedId)
+        }
         let vInputs = VitalityEngine.Inputs(
             chronoAge: Double(profile.age),
             restingHR: faRHRs.isEmpty ? nil : IntelligenceEngine.medianOf(faRHRs),
             sleepHours: vNights.isEmpty ? nil : vNights.reduce(0, +) / Double(vNights.count),
-            sleepConsistency: VitalityEngine.sleepConsistency(nightlyHours: vNights),
+            sleepConsistency: vSleepConsistency,
             rmssd: vHRVs.isEmpty ? nil : IntelligenceEngine.medianOf(vHRVs),
             rmssdNorm: VitalityEngine.rmssdNorm(forAge: Double(profile.age)),
             steps: vSteps.isEmpty ? nil : vSteps.reduce(0, +) / Double(vSteps.count))
@@ -1156,6 +1210,31 @@ final class IntelligenceEngine: ObservableObject {
         for (start, states) in sleepStateByStart {
             _ = try? await store.persistSessionSleepState(deviceId: computedId, sessionStart: start, states: states)
         }
+        // ── Persist per-epoch CONFIDENCE (honesty-by-construction) beside each kept session's stagesJSON ──
+        // Same shape as the motion/band-state persists above: only for sessions actually kept, keyed by the
+        // detected start. A session that couldn't grid is omitted and stays NULL.
+        var confidenceByStart: [Int: [Double]] = [:]
+        for night in scoredNights {
+            for (start, confidence) in night.sessionConfidence where keptStarts.contains(start) {
+                confidenceByStart[start] = confidence
+            }
+        }
+        for (start, confidence) in confidenceByStart {
+            _ = try? await store.persistSessionConfidence(deviceId: computedId, sessionStart: start, confidenceEpochs: confidence)
+        }
+        // ── Persist sleep-onset latency / WASO / disturbance count beside each kept session ───────────────
+        // Always present for every matched session (unlike motion/confidence, which can be omitted when the
+        // gravity stream is too sparse to grid), so no per-session "isEmpty" guard is needed here.
+        for night in scoredNights {
+            for start in keptStarts {
+                guard let latency = night.sessionLatency[start],
+                      let waso = night.sessionWaso[start],
+                      let disturbances = night.sessionDisturbance[start] else { continue }
+                _ = try? await store.persistSleepQualityMetrics(deviceId: computedId, sessionStart: start,
+                                                                latencySec: latency, wasoSec: waso,
+                                                                disturbanceCount: disturbances)
+            }
+        }
         // ── Overlap-aware banked-sleep heal (#899) ────────────────────────────────────────────────────
         // An unstable strap clock re-banks the SAME night under a shifted timebase, so successive passes
         // detect it at shifted bounds and the upsert above lands a SECOND row beside the stale one (the
@@ -1204,7 +1283,7 @@ final class IntelligenceEngine: ObservableObject {
 
         results = out
         note = out.isEmpty
-            ? "No scored nights yet. Wear the strap with NOOP connected overnight and the engine will score your charge, effort and rest itself, no WHOOP cloud required."
+            ? "No scored nights yet. Wear the strap with Baseline connected overnight and the engine will score your charge, effort and rest itself, no WHOOP cloud required."
             : nil
 
         // Reload the dashboard caches so the freshly computed scores show up immediately. A heal-only

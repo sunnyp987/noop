@@ -11,7 +11,7 @@ import StrandImport
 /// Settings → Backup & restore → "Export CSV…": serialize the merged "my-whoop" ∪ "my-whoop-noop"
 /// history (imported wins per day — exactly what the dashboards show; Apple Health rows are
 /// deliberately EXCLUDED so a re-import can't mis-attribute them as WHOOP data) into WHOOP's
-/// 4-CSV zip via StrandImport.WhoopCsvExporter. The zip re-imports into NOOP on Mac (Data Sources →
+/// 4-CSV zip via StrandImport.WhoopCsvExporter. The zip re-imports into Baseline on Mac (Data Sources →
 /// WHOOP Export) and on Android. On-device computed rows are marked "noop (APPROXIMATE)" in the
 /// Source column both importers ignore; the .sqlite backup remains the lossless restore path.
 ///
@@ -104,7 +104,7 @@ enum CsvExport {
                 let sleeps = SleepMerge.merge(imported: impSleep, computed: compSleep, endDay: endDay)
 
                 // Workouts: imported WHOOP ∪ on-device detected. Apple-Health workouts are intentionally
-                // omitted (read only the two NOOP sources), matching the cycles/sleep exclusion.
+                // omitted (read only the two Baseline sources), matching the cycles/sleep exclusion.
                 // Dedup by (startTs, sport), imported (deviceId) first so it wins. The same session can
                 // exist under both ids (e.g. a reimported export + BLE re-detection), which double-counted
                 // it in the CSV and inflated totals on reimport. (PR #97 review, tigercraft4.)
@@ -138,7 +138,7 @@ enum CsvExport {
             #if os(macOS)
             // Save panel — DataBackup.runExport precedent (NSSavePanel + .zip content type).
             let panel = NSSavePanel()
-            panel.title = String(localized: "Export NOOP data as CSV")
+            panel.title = String(localized: "Export Baseline data as CSV")
             panel.nameFieldStringValue = name
             panel.allowedContentTypes = [.zip]
             panel.canCreateDirectories = true

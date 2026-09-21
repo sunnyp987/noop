@@ -105,6 +105,19 @@ public enum AnalyticsEngine {
         /// so the caller persists NULL there rather than a fabricated array. Feeds the H7 re-onset CONFIRM
         /// guard on the NEXT pass; never overrides the derived hypnogram. Empty on a WHOOP 4.0. (#175)
         public let sessionSleepStateByStart: [Int: [Int]]
+        /// Per-session per-epoch CONFIDENCE (0...1, honesty-by-construction), keyed by each matched
+        /// session's detected start, on the same 30 s grid as `stagesJSON` / `sessionMotionByStart`. See
+        /// `SleepStager.sessionEpochConfidence`. The caller persists these via
+        /// `WhoopStore.persistSessionConfidence` after upserting the sleep-session rows. A session too
+        /// sparse to grid is OMITTED (no key), so the caller never persists a fabricated series.
+        public let sessionConfidenceByStart: [Int: [Double]]
+        /// Sleep-onset latency (seconds), wake-after-sleep-onset (seconds), and wake-bout count for each
+        /// matched session, keyed by detected start — the same values `hypnogramMetrics` recomputes
+        /// on-the-fly on every read, banked here so the caller can persist them once instead of re-running
+        /// the stager to answer a trend/consistency question later.
+        public let sessionLatencyByStart: [Int: Int]
+        public let sessionWasoByStart: [Int: Int]
+        public let sessionDisturbanceByStart: [Int: Int]
 
         public init(daily: DailyMetric, sleepSessions: [SleepSession],
                     cachedSleep: [CachedSleepSession], workouts: [ExerciseSession],
@@ -115,6 +128,10 @@ public enum AnalyticsEngine {
                     restConfidence: ScoreConfidence = .calibrating,
                     sessionMotionByStart: [Int: [Double]] = [:],
                     sessionSleepStateByStart: [Int: [Int]] = [:],
+                    sessionConfidenceByStart: [Int: [Double]] = [:],
+                    sessionLatencyByStart: [Int: Int] = [:],
+                    sessionWasoByStart: [Int: Int] = [:],
+                    sessionDisturbanceByStart: [Int: Int] = [:],
                     chargeDrivers: [ChargeDriver] = [],
                     skinTempRelative: SkinTempRelative? = nil) {
             self.daily = daily; self.sleepSessions = sleepSessions
@@ -129,6 +146,10 @@ public enum AnalyticsEngine {
             self.restConfidence = restConfidence
             self.sessionMotionByStart = sessionMotionByStart
             self.sessionSleepStateByStart = sessionSleepStateByStart
+            self.sessionConfidenceByStart = sessionConfidenceByStart
+            self.sessionLatencyByStart = sessionLatencyByStart
+            self.sessionWasoByStart = sessionWasoByStart
+            self.sessionDisturbanceByStart = sessionDisturbanceByStart
         }
     }
 
@@ -624,6 +645,30 @@ public enum AnalyticsEngine {
             if !motion.isEmpty { sessionMotionByStart[s.start] = motion }
         }
 
+        // ── Per-session per-epoch CONFIDENCE (honesty-by-construction) ────────
+        // How much of each epoch's stage label rests on real measurement vs. carry-forward/interpolation,
+        // for the caller to persist beside `stagesJSON` and the hypnogram to render distinctly. A session
+        // that can't grid is omitted, so the caller persists NULL rather than a fabricated series.
+        var sessionConfidenceByStart: [Int: [Double]] = [:]
+        for s in matched {
+            let confidence = SleepStager.sessionEpochConfidence(start: s.start, end: s.end,
+                                                                 grav: gravity, hr: hr, rr: rr, resp: resp)
+            if !confidence.isEmpty { sessionConfidenceByStart[s.start] = confidence }
+        }
+
+        // ── Per-session sleep-onset latency / WASO / disturbance count ────────
+        // `hypnogramMetrics` already derives these from a session's stages on every read; bank them so a
+        // trend/consistency question over history doesn't need to re-run the stager on every stored night.
+        var sessionLatencyByStart: [Int: Int] = [:]
+        var sessionWasoByStart: [Int: Int] = [:]
+        var sessionDisturbanceByStart: [Int: Int] = [:]
+        for s in matched {
+            let m = SleepStager.hypnogramMetrics(s)
+            sessionLatencyByStart[s.start] = Int(m.solS.rounded())
+            sessionWasoByStart[s.start] = Int(m.wasoS.rounded())
+            sessionDisturbanceByStart[s.start] = m.disturbances
+        }
+
         // ── Per-session per-epoch BAND sleep_state (#175) ─────────────────────
         // Grid the strap's OWN band sleep_state (the SAME `bandSleepState` samples the H7 guard consumes)
         // onto each matched session's 30 s epochs, for the caller to persist beside `stagesJSON`. This is
@@ -660,6 +705,10 @@ public enum AnalyticsEngine {
                          restConfidence: restConfidence,
                          sessionMotionByStart: sessionMotionByStart,
                          sessionSleepStateByStart: sessionSleepStateByStart,
+                         sessionConfidenceByStart: sessionConfidenceByStart,
+                         sessionLatencyByStart: sessionLatencyByStart,
+                         sessionWasoByStart: sessionWasoByStart,
+                         sessionDisturbanceByStart: sessionDisturbanceByStart,
                          chargeDrivers: chargeDrivers,
                          skinTempRelative: skinTempRelative)
     }

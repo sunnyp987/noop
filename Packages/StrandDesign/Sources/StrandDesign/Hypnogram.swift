@@ -51,6 +51,15 @@ public struct Hypnogram: View {
     /// hairlines + clock labels). Needs `nightStart`. Defaults off so existing
     /// callers are unchanged.
     public var showsTimeAxis: Bool
+    /// Per-epoch confidence (0...1, honesty-by-construction — see `SleepStager.sessionEpochConfidence`),
+    /// on a fixed `confidenceEpochS`-second grid starting at the SAME origin as `intervals` (session
+    /// start). Empty (the default) draws nothing extra — every existing caller is unchanged. When
+    /// non-empty, a slim strip under the plot marks which stretches rest on real measurement vs.
+    /// carry-forward/interpolation, so a gap-filled night reads differently from a fully-measured one
+    /// instead of presenting both identically.
+    public var confidence: [Double]
+    /// Seconds per `confidence` entry. Matches `SleepStager.epochS` (30 s).
+    public var confidenceEpochS: TimeInterval
 
     public init(
         intervals: [SleepInterval],
@@ -58,7 +67,9 @@ public struct Hypnogram: View {
         showsStageAxis: Bool = true,
         showsHover: Bool = true,
         nightStart: Date? = nil,
-        showsTimeAxis: Bool = false
+        showsTimeAxis: Bool = false,
+        confidence: [Double] = [],
+        confidenceEpochS: TimeInterval = 30
     ) {
         self.intervals = intervals.sorted { $0.start < $1.start }
         self.height = height
@@ -66,7 +77,20 @@ public struct Hypnogram: View {
         self.showsHover = showsHover
         self.nightStart = nightStart
         self.showsTimeAxis = showsTimeAxis
+        self.confidence = confidence
+        self.confidenceEpochS = confidenceEpochS
     }
+
+    /// Fraction of `confidence` entries below `lowConfidenceThreshold` — drives the VoiceOver caveat and
+    /// whether the strip is worth drawing at all (an all-solid night draws nothing extra).
+    private var lowConfidenceFraction: Double {
+        guard !confidence.isEmpty else { return 0 }
+        return Double(confidence.filter { $0 < Hypnogram.lowConfidenceThreshold }.count) / Double(confidence.count)
+    }
+    /// Below this, an epoch is drawn as "gap-filled" rather than "measured". 0.5 means at least motion OR
+    /// HR (the two heaviest-weighted signals) was missing for that epoch — see `confidenceMotionWeight`/
+    /// `confidenceHRWeight` in SleepStager, which are 0.4 each.
+    static let lowConfidenceThreshold: Double = 0.5
 
     /// Index of the hovered interval, or nil.
     @State private var hoverIndex: Int? = nil
@@ -109,8 +133,13 @@ public struct Hypnogram: View {
             let total = intervals.filter { $0.stage == stage }.reduce(0.0) { $0 + $1.duration }
             if total > 0 { parts.append("\(Hypnogram.durationPhrase(total)) \(stage.label.lowercased())") }
         }
-        return parts.isEmpty ? String(localized: "Sleep stages, no data", bundle: .module)
-                             : String(localized: "Sleep stages, \(parts.joined(separator: ", "))", bundle: .module)
+        let base = parts.isEmpty ? String(localized: "Sleep stages, no data", bundle: .module)
+                                  : String(localized: "Sleep stages, \(parts.joined(separator: ", "))", bundle: .module)
+        // Append an honest caveat when a meaningful share of the night rests on filled-in, not measured,
+        // data — never silently presented as identical to a fully-measured night.
+        guard lowConfidenceFraction >= 0.15 else { return base }
+        let pct = Int((lowConfidenceFraction * 100).rounded())
+        return base + " " + String(localized: "About \(pct) percent of this night has thin or filled-in data.", bundle: .module)
     }
 
     /// A spoken duration phrase ("2 hours 5 minutes", "45 minutes", "1 hour") for a seconds interval.
@@ -231,6 +260,12 @@ public struct Hypnogram: View {
                 }
                 .frame(height: height)
 
+                // Confidence strip: only drawn when there's real data AND something worth flagging (an
+                // all-solid night draws nothing extra, so the common case is byte-identical to before).
+                if !confidence.isEmpty && lowConfidenceFraction > 0 {
+                    confidenceStrip
+                }
+
                 // x time axis: onset · midpoint · wake clock labels under the plot
                 if showsTimeAxis, nightStart != nil {
                     HStack(spacing: 0) {
@@ -261,6 +296,50 @@ public struct Hypnogram: View {
     }
 
     private func midTime(_ iv: SleepInterval) -> TimeInterval { (iv.start + iv.end) / 2 }
+
+    // MARK: Confidence strip
+
+    /// Merged runs of consecutive LOW-confidence epochs, as (start, end) offsets in the same
+    /// origin-relative seconds as `intervals`. Merging avoids drawing a choppy 30 s-wide sliver per
+    /// epoch when a whole stretch is gap-filled.
+    private var lowConfidenceRuns: [(start: TimeInterval, end: TimeInterval)] {
+        var runs: [(start: TimeInterval, end: TimeInterval)] = []
+        var runStart: TimeInterval? = nil
+        for (i, c) in confidence.enumerated() {
+            let epochStart = origin + Double(i) * confidenceEpochS
+            if c < Hypnogram.lowConfidenceThreshold {
+                if runStart == nil { runStart = epochStart }
+            } else if let s = runStart {
+                runs.append((s, epochStart))
+                runStart = nil
+            }
+        }
+        if let s = runStart { runs.append((s, origin + Double(confidence.count) * confidenceEpochS)) }
+        return runs
+    }
+
+    private var confidenceStrip: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(StrandPalette.hairline.opacity(0.5)).frame(height: 4)
+                    ForEach(Array(lowConfidenceRuns.enumerated()), id: \.offset) { _, run in
+                        let x0 = CGFloat((run.start - origin) / span) * geo.size.width
+                        let x1 = CGFloat((run.end - origin) / span) * geo.size.width
+                        Capsule()
+                            .fill(StrandPalette.textTertiary.opacity(0.55))
+                            .frame(width: max(2, x1 - x0), height: 4)
+                            .position(x: (x0 + x1) / 2, y: 2)
+                    }
+                }
+            }
+            .frame(height: 4)
+            Text("Faded stretches are gap-filled, not directly measured", bundle: .module)
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.textTertiary)
+        }
+        .accessibilityHidden(true)   // covered by axSummary's caveat sentence
+    }
 
     // MARK: Axis
 

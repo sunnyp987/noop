@@ -301,7 +301,7 @@ struct LiveView: View {
                 .font(StrandFont.headline)
                 .foregroundStyle(StrandPalette.textPrimary)
             Text(activeConnection
-                 ? "Start a workout when the stream matters. NOOP records the interval, HR, peak, average and effort from the same live feed."
+                 ? "Start a workout when the stream matters. Baseline records the interval, HR, peak, average and effort from the same live feed."
                  : "Connect the strap first, then mark a workout from the live stream.")
                 .font(StrandFont.subhead)
                 .foregroundStyle(StrandPalette.textSecondary)
@@ -615,7 +615,7 @@ struct LiveView: View {
         #endif
     }
 
-    // The connect / buzz / disconnect controls, all routed through the unified NOOP button system:
+    // The connect / buzz / disconnect controls, all routed through the unified Baseline button system:
     // a filled primary for the lead Scan action, a secondary surface for Buzz, and the destructive
     // role for Disconnect — sentence-case, single line, optical-centred at controlHeight.
     private var scanButton: some View {

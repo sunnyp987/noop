@@ -1049,6 +1049,54 @@ public enum SleepStager {
         return out
     }
 
+    // MARK: - Per-epoch confidence (honesty-by-construction)
+
+    /// Weight of real motion coverage in an epoch's confidence score. Motion and HR are the two signals
+    /// `classifyEpochs` leans on hardest (the Cole–Kripke spine + the wake-move-fraction rule), so an
+    /// epoch missing either is the least trustworthy — hence the two heaviest weights.
+    static let confidenceMotionWeight: Double = 0.4
+    /// Weight of real HR coverage (see `confidenceMotionWeight`).
+    static let confidenceHRWeight: Double = 0.4
+    /// Weight of real R-R (HRV) coverage — a secondary signal (`dogHRVariability`'s finer discriminator
+    /// between light/deep/REM), so it counts for less than motion or HR.
+    static let confidenceRRWeight: Double = 0.1
+    /// Weight of real respiration coverage — the other secondary signal, same reasoning as R-R.
+    static let confidenceRespWeight: Double = 0.1
+
+    /// The per-epoch CONFIDENCE (0...1) that a stage label at that epoch reflects real measurement rather
+    /// than carry-forward/interpolation, on the SAME 30 s grid as `stagesJSON`/`sessionEpochMotion`. Each
+    /// epoch scores the fraction of {motion, HR, R-R, respiration} that had at least one REAL sample in its
+    /// 30 s window, weighted by how much that signal actually drives classification (`classifyEpochs` leans
+    /// hardest on motion + HR; R-R and respiration only refine). A fully-measured epoch scores 1.0; an epoch
+    /// built entirely from a neighbour's carried-forward value or an interpolated NaN gap (see
+    /// `sessionEpochSleepState`'s carry-forward and `dogHRVariability`'s NaN-interpolation) scores 0.0 on
+    /// whichever signal(s) it lacks. This does not change any classification — it is a READ-ONLY honesty
+    /// signal for the UI/caller to surface gap-filled stretches distinctly, and to hold back a score when a
+    /// session's average confidence is too low to trust (see `ScoreConfidence`).
+    /// Returns `[]` when the window has too little gravity to grid (mirrors `stageSession`'s degenerate
+    /// fallback), so the caller persists NULL, never a fabricated confidence series.
+    public static func sessionEpochConfidence(start: Int, end: Int, grav: [GravitySample],
+                                              hr: [HRSample], rr: [RRInterval],
+                                              resp: [RespSample]) -> [Double] {
+        let gSeg = rowsBetween(grav, start: start, end: end) { $0.ts }
+        if gSeg.count < 2 { return [] }
+        let gDeltas = gravityDeltas(gSeg)
+        let gTimes = gSeg.map { $0.ts }
+        let hrSeg = rowsBetween(hr, start: start, end: end) { $0.ts }
+        let rrSeg = rowsBetween(rr, start: start, end: end) { $0.ts }
+        let respSeg = rowsBetween(resp, start: start, end: end) { $0.ts }
+        let grid = buildEpochGrid(start: Double(start), end: Double(end),
+                                  gravTimes: gTimes, gravDeltas: gDeltas,
+                                  hr: hrSeg, rr: rrSeg, resp: respSeg)
+        if grid.nEpochs == 0 { return [] }
+        return (0..<grid.nEpochs).map { i in
+            (grid.gravCoverage[i] > 0 ? confidenceMotionWeight : 0)
+                + (grid.hrCoverage[i] > 0 ? confidenceHRWeight : 0)
+                + (grid.rrCoverage[i] > 0 ? confidenceRRWeight : 0)
+                + (grid.respCoverage[i] > 0 ? confidenceRespWeight : 0)
+        }
+    }
+
     // MARK: - Epoch grid
 
     struct EpochGrid {
@@ -1060,6 +1108,14 @@ public enum SleepStager {
         let hr: [Double]          // per-epoch mean HR (bpm) or NaN
         let rr: [[Double]]        // per-epoch RR intervals (ms)
         let resp: [[Double]]      // per-epoch raw respiration samples
+        // Raw per-epoch SAMPLE COUNTS (not derived values) — how many real readings of each signal
+        // actually fell in this epoch, before any carry-forward/interpolation smooths over the gap.
+        // Kept separate from `hr`/`rr`/`resp` (which already collapse to a derived value or bucket) so
+        // `sessionEpochConfidence` can tell "one real sample" from "zero, filled from a neighbour".
+        let gravCoverage: [Int]
+        let hrCoverage: [Int]
+        let rrCoverage: [Int]
+        let respCoverage: [Int]
         var nEpochs: Int { counts.count }
         func epochMid(_ i: Int) -> Double { edges[i] + epochS / 2.0 }
     }
@@ -1069,7 +1125,8 @@ public enum SleepStager {
                                hr: [HRSample], rr: [RRInterval], resp: [RespSample]) -> EpochGrid {
         if end <= start {
             return EpochGrid(start: start, end: end, edges: [start], counts: [],
-                             moveFrac: [], hr: [], rr: [], resp: [])
+                             moveFrac: [], hr: [], rr: [], resp: [],
+                             gravCoverage: [], hrCoverage: [], rrCoverage: [], respCoverage: [])
         }
         let nEpochs = max(1, Int(ceil((end - start) / epochS)))
         var edges = (0...nEpochs).map { start + Double($0) * epochS }
@@ -1116,7 +1173,9 @@ public enum SleepStager {
         let moveFrac = (0..<nEpochs).map { gravN[$0] > 0 ? Double(moveN[$0]) / Double(gravN[$0]) : 1.0 }
 
         return EpochGrid(start: start, end: end, edges: edges, counts: counts,
-                         moveFrac: moveFrac, hr: hrMean, rr: rrBuckets, resp: respBuckets)
+                         moveFrac: moveFrac, hr: hrMean, rr: rrBuckets, resp: respBuckets,
+                         gravCoverage: gravN, hrCoverage: hrCnt,
+                         rrCoverage: rrBuckets.map { $0.count }, respCoverage: respBuckets.map { $0.count })
     }
 
     // MARK: - Cole–Kripke

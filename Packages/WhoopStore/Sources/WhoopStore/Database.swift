@@ -446,6 +446,29 @@ extension WhoopStore {
                 t.primaryKey(["deviceId", "startTs"])
             }
         }
+        // v23 (sleep honesty + persisted metrics): two additive changes to `sleepSession`, both nullable
+        // so every existing row reads back null and old readers that don't SELECT them are unaffected.
+        //   • `confidenceJSON`, a compact JSON array of per-epoch [0,1] confidence scores on the SAME
+        //     30 s grid as `stagesJSON`/`motionJSON` (see SleepStager.sessionEpochConfidence). An epoch's
+        //     score reflects how much REAL measured signal (motion + HR, secondarily R-R + respiration)
+        //     covered it; an epoch built entirely from carry-forward/interpolation (SleepStager.swift's
+        //     `sessionEpochSleepState` carry-forward, `dogHRVariability`'s NaN-interpolation) scores low.
+        //     Lets the hypnogram render gap-filled stretches distinctly instead of presenting them
+        //     identically to directly-measured epochs.
+        //   • `latencySec`, `wasoSec`, `disturbanceCount` — sleep-onset latency, wake-after-sleep-onset,
+        //     and the wake-bout count `hypnogramMetrics` already computes on every read but never banked,
+        //     so trend/consistency scoring over history doesn't need to re-run the stager on every stored
+        //     night. Nullable: a session computed before this migration, or one whose metrics couldn't be
+        //     derived, stores null rather than a fabricated 0.
+        migrator.registerMigration("v23-sleep-confidence-metrics") { db in
+            try db.alter(table: "sleepSession") { t in
+                t.add(column: "confidenceJSON", .text)
+                t.add(column: "latencySec", .integer)
+                t.add(column: "wasoSec", .integer)
+                t.add(column: "disturbanceCount", .integer)
+            }
+        }
+
         return migrator
     }
 }

@@ -88,7 +88,7 @@ struct BackupSyncView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Daily auto-backup")
                             .font(StrandFont.body).foregroundStyle(StrandPalette.textPrimary)
-                        Text("Backs up to your folder about once a day and keeps the latest \(FolderBackup.keepCount). On this platform it runs when you next open NOOP.")
+                        Text("Backs up to your folder about once a day and keeps the latest \(FolderBackup.keepCount). On this platform it runs when you next open Baseline.")
                             .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -130,7 +130,7 @@ struct BackupSyncView: View {
         if FolderBackup.pickFolder() != nil { folderLabel = FolderBackup.folderLabel() }
         #else
         // #1000a: on iOS the folder picker has reportedly refused to enable its Select button, leaving
-        // the user with only Cancel and NOOP silently doing nothing. We can't tell a deliberate Cancel
+        // the user with only Cancel and Baseline silently doing nothing. We can't tell a deliberate Cancel
         // apart from that dead-button dead-end (both come back nil), so when no folder arrives we show
         // the screen's normal result alert with a concrete workaround instead of staying silent. Mildly
         // chatty on a genuine Cancel; honest and actionable when the picker is actually broken.
@@ -139,7 +139,7 @@ struct BackupSyncView: View {
                 folderLabel = FolderBackup.folderLabel()
             } else {
                 alertTitle = String(localized: "No folder selected")
-                alertMessage = String(localized: "NOOP didn't get a folder back from the picker. If the Select button won't enable, try creating a fresh folder in Files (under On My iPhone or iCloud Drive) and choosing that instead.")
+                alertMessage = String(localized: "Baseline didn't get a folder back from the picker. If the Select button won't enable, try creating a fresh folder in Files (under On My iPhone or iCloud Drive) and choosing that instead.")
                 showAlert = true
             }
         }
@@ -166,7 +166,7 @@ struct BackupSyncView: View {
         snapshots = FolderBackup.listSnapshots()
         if snapshots.isEmpty {
             alertTitle = String(localized: "No backups found")
-            alertMessage = String(localized: "There are no NOOP backups in your folder yet. Use Back up now first.")
+            alertMessage = String(localized: "There are no Baseline backups in your folder yet. Use Back up now first.")
             showAlert = true
         } else {
             showRestoreSheet = true
@@ -187,7 +187,7 @@ struct BackupSyncView: View {
                 switch result {
                 case .imported:
                     alertTitle = String(localized: "Restored")
-                    alertMessage = String(localized: "Fully quit and reopen NOOP to load it.")
+                    alertMessage = String(localized: "Fully quit and reopen Baseline to load it.")
                 case .failure(let m):
                     alertTitle = String(localized: "Restore problem"); alertMessage = m
                 case .cancelled, .exported:
