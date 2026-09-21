@@ -51,7 +51,7 @@ jobs:
           xcodebuild archive
           -scheme NOOPiOS
           -configuration Release
-          -archivePath build/NOOP.xcarchive
+          -archivePath build/Baseline.xcarchive
           -sdk iphoneos
           -destination 'generic/platform=iOS'
           CODE_SIGNING_ALLOWED=NO
@@ -59,15 +59,15 @@ jobs:
           AD_HOC_CODE_SIGNING_ALLOWED=YES
           | xcpretty && exit ${PIPESTATUS[0]}
 
-      - name: Package the .ipa (Payload/NOOP.app zipped)
+      - name: Package the .ipa (Payload/Baseline.app zipped)
         run: |
           cd build
           mkdir Payload
-          cp -r NOOP.xcarchive/Products/Applications/NOOP.app Payload/
-          zip -r NOOP.ipa Payload
+          cp -r Baseline.xcarchive/Products/Applications/Baseline.app Payload/
+          zip -r Baseline.ipa Payload
 
       - name: Upload .ipa as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NOOP-ipa
-          path: build/NOOP.ipa
+          name: Baseline-ipa
+          path: build/Baseline.ipa

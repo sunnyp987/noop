@@ -48,13 +48,13 @@ jobs:
             -destination 'generic/platform=macOS' \
             ARCHS="x86_64 arm64" ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO build
-          app="build/release-dd/Build/Products/Release/NOOP.app"
+          app="build/release-dd/Build/Products/Release/Baseline.app"
           test -d "$app"
-          lipo -info "$app/Contents/MacOS/NOOP"
-          lipo -info "$app/Contents/MacOS/NOOP" | grep -E 'x86_64.*arm64|arm64.*x86_64'
+          lipo -info "$app/Contents/MacOS/Baseline"
+          lipo -info "$app/Contents/MacOS/Baseline" | grep -E 'x86_64.*arm64|arm64.*x86_64'
           Tools/anonymize-macos-app.sh "$app"
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/NOOP-v${VERSION}-macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/Baseline-v${VERSION}-macos.zip"
 
       - name: Build unsigned iOS IPA
         run: |
@@ -75,25 +75,25 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/ios-dd \
             CODE_SIGNING_ALLOWED=NO build
-          app="build/ios-dd/Build/Products/Release-iphoneos/NOOP.app"
+          app="build/ios-dd/Build/Products/Release-iphoneos/Baseline.app"
           test -d "$app"
           Tools/anonymize-ios-app.sh "$app"
           stage="build/ios-stage"
           mkdir -p "$GITHUB_WORKSPACE/dist"
           rm -rf "$stage"
           mkdir -p "$stage/Payload"
-          ditto "$app" "$stage/Payload/NOOP.app"
-          rm -rf "$stage/Payload/NOOP.app/Watch"
-          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$stage/Payload" "$GITHUB_WORKSPACE/dist/NOOP-v${VERSION}-ios.ipa"
-          ls -lh "$GITHUB_WORKSPACE/dist/NOOP-v${VERSION}-ios.ipa"
+          ditto "$app" "$stage/Payload/Baseline.app"
+          rm -rf "$stage/Payload/Baseline.app/Watch"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$stage/Payload" "$GITHUB_WORKSPACE/dist/Baseline-v${VERSION}-ios.ipa"
+          ls -lh "$GITHUB_WORKSPACE/dist/Baseline-v${VERSION}-ios.ipa"
 
       - name: Upload Apple artifacts
         uses: actions/upload-artifact@v4
         with:
           name: noop-apple-artifacts
           path: |
-            dist/NOOP-v*-macos.zip
-            dist/NOOP-v*-ios.ipa
+            dist/Baseline-v*-macos.zip
+            dist/Baseline-v*-ios.ipa
           if-no-files-found: error
 
   android:
@@ -135,13 +135,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp android/app/build/outputs/apk/full/release/app-full-release.apk "dist/NOOP-v${VERSION}.apk"
+          cp android/app/build/outputs/apk/full/release/app-full-release.apk "dist/Baseline-v${VERSION}.apk"
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: noop-android-artifact
-          path: dist/NOOP-v*.apk
+          path: dist/Baseline-v*.apk
           if-no-files-found: error
 
   publish:
@@ -179,12 +179,12 @@ jobs:
         run: |
           set -euo pipefail
           ls -lh dist
-          notes="Recovered NOOP ${TAG} artifacts from this continuity mirror."
+          notes="Baseline ${TAG} artifacts."
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" --title "NOOP ${TAG}" --notes "$notes" --latest
+              --target "$GITHUB_SHA" --title "Baseline ${TAG}" --notes "$notes" --latest
             gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" --title "NOOP ${TAG}" --notes "$notes" --latest
+              --target "$GITHUB_SHA" --title "Baseline ${TAG}" --notes "$notes" --latest
           fi

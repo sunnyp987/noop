@@ -44,14 +44,14 @@ cask "noop" do
   version "${VER}"
   sha256 "${SHA}"
 
-  url "https://github.com/${ORG}/${REPO}/releases/download/v#{version}/NOOP-v#{version}-macos.zip"
-  name "NOOP"
+  url "https://github.com/${ORG}/${REPO}/releases/download/v#{version}/Baseline-v#{version}-macos.zip"
+  name "Baseline"
   desc "Standalone, fully offline companion app for WHOOP straps"
   homepage "https://github.com/${ORG}/${REPO}"
 
-  app "NOOP.app"
+  app "Baseline.app"
 
-  caveats "NOOP ships anonymously and is unsigned (no Apple Developer ID), so on first launch macOS Gatekeeper will block it. On macOS 15 Sequoia and later: try to open NOOP once, then go to System Settings > Privacy & Security, scroll down, and click 'Open Anyway' next to NOOP. (On macOS 14 and earlier you can right-click NOOP in /Applications and choose Open.) Update later with: brew upgrade --cask noop."
+  caveats "Baseline ships anonymously and is unsigned (no Apple Developer ID), so on first launch macOS Gatekeeper will block it. On macOS 15 Sequoia and later: try to open Baseline once, then go to System Settings > Privacy & Security, scroll down, and click 'Open Anyway' next to Baseline. (On macOS 14 and earlier you can right-click Baseline in /Applications and choose Open.) Update later with: brew upgrade --cask noop."
 end
 EOF
 

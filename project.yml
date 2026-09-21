@@ -107,9 +107,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.noopapp.noop
-        PRODUCT_NAME: NOOP
+        PRODUCT_NAME: Baseline
         # Pin the Swift module name so `@testable import Strand` resolves even though PRODUCT_NAME is
-        # NOOP — the test target and shared sources refer to the app module as `Strand`.
+        # Baseline — the test target and shared sources refer to the app module as `Strand`.
         PRODUCT_MODULE_NAME: Strand
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
@@ -142,7 +142,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.noopapp.strandtests
         # Host the unit tests in the app so `@testable import Strand` links against the real app module.
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/NOOP.app/Contents/MacOS/NOOP"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Baseline.app/Contents/MacOS/Baseline"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
   # ---------------------------------------------------------------------------
@@ -252,7 +252,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.noopapp.noop
-        PRODUCT_NAME: NOOP
+        PRODUCT_NAME: Baseline
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Ship every *.appiconset (not just the primary AppIcon) so the alternate "AppIcon-Navy"
         # set is compiled into the bundle and is available to UIApplication.setAlternateIconName.
@@ -269,7 +269,7 @@ targets:
       - package: MarkdownUI
       - package: ZIPFoundation
       - target: NOOPiOSWidgets
-      # Embed the watchOS app so the iPhone app carries it (NOOP.app/Watch/NOOPWatch.app). A watch app
+      # Embed the watchOS app so the iPhone app carries it (Baseline.app/Watch/NOOPWatch.app). A watch app
       # installs by riding inside its iOS companion; without this it would never reach a paired watch.
       # Build-from-source delivers it for certain; sideload install of the embedded watch app under a free
       # Apple ID is unproven (an Apple limitation), so the docs steer watch users to a source build for now.
@@ -311,7 +311,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.noopapp.noop.widgets
-        PRODUCT_NAME: NOOPWidgets
+        PRODUCT_NAME: BaselineWidgets
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
     dependencies:
@@ -363,8 +363,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.noopapp.noop.watch
-        # The bundle FILE is NOOPWatch.app so it doesn't collide with the iPhone app's NOOP.app when it is
-        # embedded at NOOP.app/Watch/NOOPWatch.app. The user still sees "NOOP" on the wrist via the
+        # The bundle FILE is NOOPWatch.app so it doesn't collide with the iPhone app's Baseline.app when it is
+        # embedded at Baseline.app/Watch/NOOPWatch.app. The user still sees "Baseline" on the wrist via the
         # CFBundleName / CFBundleDisplayName above.
         PRODUCT_NAME: NOOPWatch
         GENERATE_INFOPLIST_FILE: NO

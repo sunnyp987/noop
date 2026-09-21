@@ -1,18 +1,18 @@
 {
-  "name": "NOOP",
+  "name": "Baseline",
   "subtitle": "A standalone WHOOP app — your strap, your device, fully offline.",
-  "description": "An AltStore / SideStore source for NOOP, the independent open-source WHOOP companion. Add this source to get one-tap updates for the sideloaded iOS build.\n\nNOOP is not affiliated with WHOOP. It reads a strap you own, directly over Bluetooth, on your own device — no WHOOP app, no subscription, no cloud.",
-  "iconURL": "https://github.com/ParthJadhav/noop/raw/main/Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png",
-  "website": "https://github.com/ParthJadhav/noop",
+  "description": "An AltStore / SideStore source for Baseline, the independent open-source WHOOP companion. Add this source to get one-tap updates for the sideloaded iOS build.\n\nBaseline is not affiliated with WHOOP. It reads a strap you own, directly over Bluetooth, on your own device — no WHOOP app, no subscription, no cloud.",
+  "iconURL": "https://github.com/sunnyp987/noop/raw/main/Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png",
+  "website": "https://github.com/sunnyp987/noop",
   "tintColor": "44E2B0",
   "apps": [
     {
-      "name": "NOOP",
+      "name": "Baseline",
       "bundleIdentifier": "com.noopapp.noop",
       "developerName": "NoopApp",
       "subtitle": "Read your own WHOOP strap, fully offline.",
-      "localizedDescription": "NOOP talks to a WHOOP 4.0 / 5.0 / MG strap you own directly over Bluetooth — no WHOOP app, no subscription, no cloud. Live heart rate, history sync, and NOOP's own Charge / Effort / Rest scores, all computed on-device and stored only on your iPhone.\n\nIndependent and experimental; not affiliated with WHOOP. Source: https://github.com/ParthJadhav/noop",
-      "iconURL": "https://github.com/ParthJadhav/noop/raw/main/Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png",
+      "localizedDescription": "Baseline talks to a WHOOP 4.0 / 5.0 / MG strap you own directly over Bluetooth — no WHOOP app, no subscription, no cloud. Live heart rate, history sync, and Baseline's own Charge / Effort / Rest scores, all computed on-device and stored only on your iPhone.\n\nIndependent and experimental; not affiliated with WHOOP. Source: https://github.com/sunnyp987/noop",
+      "iconURL": "https://github.com/sunnyp987/noop/raw/main/Strand/Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png",
       "tintColor": "44E2B0",
       "category": "healthcare-fitness",
       "screenshotURLs": [],
@@ -21,8 +21,8 @@
           "version": "8.2.0",
           "buildVersion": "170",
           "date": "2026-07-05",
-          "localizedDescription": "NOOP 8.2.0. See the release notes for what changed.",
-          "downloadURL": "https://github.com/ParthJadhav/noop/releases/download/v8.2.0/NOOP-v8.2.0-ios.ipa",
+          "localizedDescription": "Baseline 8.2.0. See the release notes for what changed.",
+          "downloadURL": "https://github.com/sunnyp987/noop/releases/download/v8.2.0/Baseline-v8.2.0-ios.ipa",
           "size": 14027253,
           "minOSVersion": "17.0"
         }
@@ -32,16 +32,16 @@
           "com.apple.developer.healthkit"
         ],
         "privacy": {
-          "NSBluetoothAlwaysUsageDescription": "NOOP connects directly to your WHOOP strap over Bluetooth to read heart rate, R-R intervals, battery, and sensor data locally on your iPhone. Nothing leaves your device.",
-          "NSHealthShareUsageDescription": "NOOP reads your own Apple Health data on-device to compute recovery, strain, and sleep. Nothing leaves your device.",
-          "NSHealthUpdateUsageDescription": "NOOP writes the metrics it computes from your strap back into Apple Health, on-device and only when you allow it."
+          "NSBluetoothAlwaysUsageDescription": "Baseline connects directly to your WHOOP strap over Bluetooth to read heart rate, R-R intervals, battery, and sensor data locally on your iPhone. Nothing leaves your device.",
+          "NSHealthShareUsageDescription": "Baseline reads your own Apple Health data on-device to compute recovery, strain, and sleep. Nothing leaves your device.",
+          "NSHealthUpdateUsageDescription": "Baseline writes the metrics it computes from your strap back into Apple Health, on-device and only when you allow it."
         }
       },
       "version": "8.2.0",
       "buildVersion": "170",
       "versionDate": "2026-07-05",
-      "versionDescription": "NOOP 8.2.0. See the release notes for what changed.",
-      "downloadURL": "https://github.com/ParthJadhav/noop/releases/download/v8.2.0/NOOP-v8.2.0-ios.ipa",
+      "versionDescription": "Baseline 8.2.0. See the release notes for what changed.",
+      "downloadURL": "https://github.com/sunnyp987/noop/releases/download/v8.2.0/Baseline-v8.2.0-ios.ipa",
       "size": 14027253,
       "minOSVersion": "17.0"
     }
