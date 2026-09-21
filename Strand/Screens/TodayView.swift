@@ -414,9 +414,13 @@ struct TodayView: View {
     // the ring shows (never a second store read) plus the folded Readiness, so the sheet can never disagree
     // with the ring. A calibrating night (empty drivers) taps through to the EXISTING calibration countdown.
     @State private var showChargeBreakdown = false
-    /// Mirrors `showChargeBreakdown` for the Effort/Rest ring taps (see `heroRingColumn`'s `onRingTap`).
-    @State private var showRestBreakdown = false
-    @State private var showEffortBreakdown = false
+    /// Which of the Effort/Rest ring-tap breakdown sheets is open, or nil. A single `.sheet(item:)`
+    /// covering both — NOT two more `.sheet(isPresented:)` flags alongside `showChargeBreakdown` — because
+    /// this view already stacks several `.sheet(isPresented:)` modifiers, and two more on top of those
+    /// (8 total) silently stopped presenting on-device: the ring tap registered (haptic fired) but no
+    /// sheet ever appeared. Consolidating these two into one `.sheet(item:)` avoids adding to that count.
+    private enum HeroRingBreakdown: Identifiable { case effort, rest; var id: Self { self } }
+    @State private var heroRingBreakdown: HeroRingBreakdown?
     /// Time-in-zone for the Effort breakdown sheet, loaded lazily via `.task` when the sheet opens (unlike
     /// Charge/Rest, this needs the day's raw HR stream, not just the already-loaded `DailyMetric` row, so
     /// it can't be a pure derived property). nil before load / when there's no HR for the day.
@@ -1444,8 +1448,12 @@ struct TodayView: View {
         // A1 (#514/#706): the Charge breakdown, opened by tapping the Today hero Charge ring. The body
         // builds lazily here (#819 lag) from the drivers DERIVED off the displayed row (never a second read).
         .sheet(isPresented: $showChargeBreakdown) { chargeBreakdownSheet }
-        .sheet(isPresented: $showRestBreakdown) { restBreakdownSheet }
-        .sheet(isPresented: $showEffortBreakdown) { effortBreakdownSheet }
+        .sheet(item: $heroRingBreakdown) { which in
+            switch which {
+            case .effort: effortBreakdownSheet
+            case .rest: restBreakdownSheet
+            }
+        }
         // Honour a "Restore to Today" tap from the inbox: flip the matching dismissed flag back so the
         // card reappears (the inbox also clears the @AppStorage key directly, but this covers an
         // already-mounted Today). Cleared once handled.
@@ -1912,7 +1920,7 @@ struct TodayView: View {
                         }
                     }
                     NavigationLink {
-                        ScoringGuideView(initialSection: .rest, onClose: { showRestBreakdown = false })
+                        ScoringGuideView(initialSection: .rest, onClose: { heroRingBreakdown = nil })
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "function")
@@ -1947,12 +1955,12 @@ struct TodayView: View {
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { showRestBreakdown = false }
+                    Button("Done") { heroRingBreakdown = nil }
                         .foregroundStyle(StrandPalette.accent)
                 }
                 #else
                 ToolbarItem {
-                    Button("Done") { showRestBreakdown = false }
+                    Button("Done") { heroRingBreakdown = nil }
                         .foregroundStyle(StrandPalette.accent)
                 }
                 #endif
@@ -1990,7 +1998,7 @@ struct TodayView: View {
                         ProgressView().frame(maxWidth: .infinity, minHeight: 120)
                     }
                     NavigationLink {
-                        ScoringGuideView(initialSection: .effort, onClose: { showEffortBreakdown = false })
+                        ScoringGuideView(initialSection: .effort, onClose: { heroRingBreakdown = nil })
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "function")
@@ -2025,12 +2033,12 @@ struct TodayView: View {
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { showEffortBreakdown = false }
+                    Button("Done") { heroRingBreakdown = nil }
                         .foregroundStyle(StrandPalette.accent)
                 }
                 #else
                 ToolbarItem {
-                    Button("Done") { showEffortBreakdown = false }
+                    Button("Done") { heroRingBreakdown = nil }
                         .foregroundStyle(StrandPalette.accent)
                 }
                 #endif
@@ -2772,11 +2780,11 @@ struct TodayView: View {
                 chargeRing(score: score, d: d, diameter: ring)
             }
             heroRingColumn(section: .effort, domain: .effort,
-                           onRingTap: { showEffortBreakdown = true }) {
+                           onRingTap: { heroRingBreakdown = .effort }) {
                 effortRing(d: d, diameter: ring)
             }
             heroRingColumn(section: .rest, domain: .rest, provenanceKey: "sleep_performance",
-                           onRingTap: { showRestBreakdown = true }) {
+                           onRingTap: { heroRingBreakdown = .rest }) {
                 restRing(diameter: ring)
             }
         }
