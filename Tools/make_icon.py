@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""NOOP app icon — Titanium & Gold v3.1 "gold on navy".
+"""Baseline app icon — Titanium & Gold v3.6 "gold on navy, resting on a baseline".
 
 A deep-navy tile + a THICK open gold recovery ring (round-capped, gold gradient
-along the sweep) + a solid gold core dot. Matches the in-app BrandMark geometry
-(open ~80% arc from 12 o'clock, clockwise) but on navy with a heavier stroke.
+along the sweep) + a solid gold core dot, resting on a short horizontal gold
+line beneath it — the literal "baseline" the app is named for. Matches the
+in-app BrandMark geometry (open ~80% arc from 12 o'clock, clockwise) but on
+navy with a heavier stroke.
 
-Usage: make_icon.py            -> writes noop_icon_1024.png + noop_icon_432.png
+Usage: make_icon.py            -> writes baseline_icon_1024.png + baseline_icon_432.png
 Distribute with distribute_icons.sh.
 """
 import os, math, sys
@@ -29,7 +31,7 @@ def grade(t):
     """Gold ramp along the ring: pale -> brand -> deep."""
     return lerp(GOLD_LIGHT, GOLD, t / 0.5) if t < 0.5 else lerp(GOLD, GOLD_DEEP, (t - 0.5) / 0.5)
 
-def render(S, ring_scale=1.0):
+def render(S, ring_scale=1.0, show_baseline=True):
     SS = 4                      # supersample for clean anti-aliasing
     W = S * SS
 
@@ -49,6 +51,9 @@ def render(S, ring_scale=1.0):
     mark = Image.new('RGBA', (W, W), (0, 0, 0, 0))
     md = ImageDraw.Draw(mark)
     cx = cy = W / 2.0
+    # A touch smaller than a full-bleed ring so the baseline line has clean room beneath it
+    # without the whole mark shrinking into the tile (0.92 keeps the ring visually dominant).
+    ring_scale = ring_scale * (0.92 if show_baseline else 1.0)
     outer_r = 0.39 * W * ring_scale
     ring_w  = 0.135 * W * ring_scale
     center_r = outer_r - ring_w / 2.0
@@ -73,6 +78,18 @@ def render(S, ring_scale=1.0):
     # through — instead the sheen rides on its own layer, alpha_composited below.
     md.ellipse([cx - core_r, cy - core_r, cx + core_r, cy + core_r], fill=GOLD + (255,))
 
+    # The BASELINE: a short, centred horizontal line beneath the ring — the literal mark
+    # the app is named for, and the one element that makes this glyph "Baseline" rather
+    # than a recoloured copy of the old ring-only mark. Deep-gold (not the ramp), so it
+    # reads as a distinct grounding element rather than part of the ring's own gradient.
+    if show_baseline:
+        line_y = W * 0.795
+        line_half = W * 0.62 / 2
+        line_thick = W * 0.028
+        md.rounded_rectangle(
+            [cx - line_half, line_y - line_thick / 2, cx + line_half, line_y + line_thick / 2],
+            radius=line_thick / 2, fill=GOLD_DEEP + (255,))
+
     img = Image.alpha_composite(img, mark)
 
     # Subtle lighter top-sheen on the core (own layer, properly blended).
@@ -90,6 +107,6 @@ if __name__ == '__main__':
     # Flatten to RGB (no alpha) for the iOS/macOS app icon. iOS app icons MUST be fully opaque, an
     # RGBA icon renders glitched when applied as an alternate icon (#708). The art already fills the
     # whole opaque navy tile, so dropping the all-255 alpha channel changes nothing visible.
-    render(1024, ring_scale=1.00).convert('RGB').save(os.path.join(OUT, 'noop_icon_1024.png'))   # iOS/macOS (squircle shows full art)
-    render(432,  ring_scale=0.80).save(os.path.join(OUT, 'noop_icon_432.png'))     # Android adaptive bg (ring inside safe-zone)
-    print('wrote noop_icon_1024.png, noop_icon_432.png, noop_icon_preview.png')
+    render(1024, ring_scale=1.00).convert('RGB').save(os.path.join(OUT, 'baseline_icon_1024.png'))   # iOS/macOS (squircle shows full art)
+    render(432,  ring_scale=0.80).save(os.path.join(OUT, 'baseline_icon_432.png'))     # Android adaptive bg (ring inside safe-zone)
+    print('wrote baseline_icon_1024.png, baseline_icon_432.png')
