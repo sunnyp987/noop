@@ -659,6 +659,10 @@ private struct FitnessAgeSection: View {
     @State private var fitnessAge: Double?
     /// Latest estimated VO₂max (ml/kg/min) from "vo2max_est" — only present once a waist is set.
     @State private var vo2max: Double?
+    /// The "yyyy-MM-dd" week-anchor (Saturday) the shown number is FROM — may be weeks/months in the
+    /// past for a backfilled week (see IntelligenceEngine.computeAndPersistWeeklyFitnessVitality). Shown
+    /// so a comparison against another app's same-week number is apples-to-apples, not "today vs then".
+    @State private var fitnessAgeWeekOf: String?
     @State private var loaded = false
 
     /// Reveal the readiness checklist (the "ⓘ How accurate is this?" disclosure under a shown value).
@@ -679,6 +683,17 @@ private struct FitnessAgeSection: View {
     /// The catalog descriptor backing the trend sheet + accent.
     private var fitnessAgeMetric: MetricDescriptor? { MetricCatalog.all.first { $0.key == "fitness_age" } }
 
+    /// "vs age N · week of Mon D" when the anchor week is known, so a comparison against another app's
+    /// reading for the SAME week is apples-to-apples rather than "today" vs "whenever this last computed".
+    private func weekOfTrailing(vsAge age: Int) -> String {
+        guard let day = fitnessAgeWeekOf, let date = Repository.date(fromDay: day) else {
+            return String(localized: "vs age \(age)")
+        }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d"
+        return String(localized: "vs age \(age) · week of \(fmt.string(from: date))")
+    }
+
     /// Build the readiness verdict from the same signals IntelligenceEngine feeds the engine: the last 7
     /// computed/imported days give the resting-HR + activity coverage counts; the profile gives the rest.
     private var readiness: FitnessAgeReadiness {
@@ -697,7 +712,7 @@ private struct FitnessAgeSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Fitness Age", overline: "Weekly",
-                          trailing: fitnessAge != nil ? String(localized: "vs age \(profile.age)") : nil)
+                          trailing: fitnessAge != nil ? weekOfTrailing(vsAge: profile.age) : nil)
             content
         }
         .sheet(item: $fitnessSheet) { which in
@@ -860,6 +875,7 @@ private struct FitnessAgeSection: View {
         let faPts = await repo.exploreSeries(key: "fitness_age", source: "my-whoop")
         let vo2Pts = await repo.exploreSeries(key: "vo2max_est", source: "my-whoop")
         fitnessAge = faPts.last?.value
+        fitnessAgeWeekOf = faPts.last?.day
         vo2max = vo2Pts.last?.value
         loaded = true
     }
@@ -1000,6 +1016,9 @@ private struct VitalitySection: View {
     @EnvironmentObject var profile: ProfileStore
     @State private var vitality: Double?
     @State private var bodyAge: Double?
+    /// The "yyyy-MM-dd" week-anchor the shown Vitality/Body Age is FROM (see FitnessAgeSection's
+    /// `fitnessAgeWeekOf` for why this matters for an apples-to-apples cross-app comparison).
+    @State private var vitalityWeekOf: String?
     @State private var loaded = false
 
     private var contributions: [VitalityEngine.Contribution] {
@@ -1026,8 +1045,7 @@ private struct VitalitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Vitality", overline: "Weekly",
-                          trailing: bodyAge != nil ? String(localized: "Body Age \(Int((bodyAge ?? 0).rounded()))") : nil)
+            SectionHeader("Vitality", overline: "Weekly", trailing: vitalityTrailing())
             if let v = vitality, let ba = bodyAge {
                 hero(vitality: v, bodyAge: ba)
             } else if loaded {
@@ -1037,6 +1055,17 @@ private struct VitalitySection: View {
             }
         }
         .task(id: repo.refreshSeq) { await load() }
+    }
+
+    /// "Body Age N · week of Mon D" when known, so the reader can line up this reading against another
+    /// app's number for the SAME week rather than assuming it's today's.
+    private func vitalityTrailing() -> String? {
+        guard let bodyAge else { return nil }
+        let ageText = String(localized: "Body Age \(Int(bodyAge.rounded()))")
+        guard let day = vitalityWeekOf, let date = Repository.date(fromDay: day) else { return ageText }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM d"
+        return "\(ageText) · \(String(localized: "week of \(fmt.string(from: date))"))"
     }
 
     private func hero(vitality v: Double, bodyAge ba: Double) -> some View {
@@ -1116,7 +1145,9 @@ private struct VitalitySection: View {
     }
 
     private func load() async {
-        vitality = (await repo.exploreSeries(key: "vitality", source: "my-whoop")).last?.value
+        let vPts = await repo.exploreSeries(key: "vitality", source: "my-whoop")
+        vitality = vPts.last?.value
+        vitalityWeekOf = vPts.last?.day
         bodyAge = (await repo.exploreSeries(key: "body_age", source: "my-whoop")).last?.value
         loaded = true
     }
