@@ -1200,9 +1200,10 @@ final class IntelligenceEngine: ObservableObject {
         // ── Baseline Age (in-house, original) ────────────────────────────────────────────────────────
         // A multi-domain composite BiometricAgeEngine builds from THIS week's cardiorespiratory (RHR +
         // activity), autonomic (HRV vs age-normative curve), sleep (duration + regularity), training-load
-        // balance, and respiratory-stability signals — see BiometricAgeEngine.swift's header for why this
-        // exists (transparent domains + a saturating combination, vs a single linear formula that can hit
-        // its floor from one extreme input, and vs WHOOP's own undisclosed Healthspan formula). Reuses
+        // balance, respiratory-stability, and training-load-vs-HRV-recovery-interaction signals — see
+        // BiometricAgeEngine.swift's header for why this exists (transparent domains + a saturating
+        // combination, vs a single linear formula that can hit its floor from one extreme input, and vs
+        // WHOOP's own undisclosed Healthspan formula). Reuses
         // `fa7`/`faRHRs`-equivalent aggregation freshly here (this function doesn't have those locals in
         // scope), recomputed every pass alongside the weekly Fitness Age/Vitality above.
         do {
@@ -1263,7 +1264,9 @@ final class IntelligenceEngine: ObservableObject {
                     ?? VitalityEngine.sleepConsistency(nightlyHours: bioNights),
                 sriPercent: bioSriPercent,
                 trainingLoadRatio: trainingLoadRatioForBioAge,
-                respRateCV: bioRespCV)
+                respRateCV: bioRespCV,
+                hrvBaselineMean: baselines2.hrv?.usable == true ? baselines2.hrv?.baseline : nil,
+                hrvBaselineSpread: baselines2.hrv?.usable == true ? baselines2.hrv?.spread : nil)
             if let bioRes = BiometricAgeEngine.compute(bioInputs) {
                 let bioSatKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
                 _ = try? await store.upsertMetricSeries([

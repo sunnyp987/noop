@@ -10,7 +10,7 @@ import Foundation
 // how they're weighted, the saturating transform — is Baseline's own construction, same honesty rule as
 // every other composite in this codebase: real inputs, visible math, no claim of clinical validation.
 //
-// Five domains, each expressed as a YEARS-EQUIVALENT delta from chronological age (negative = younger):
+// Six domains, each expressed as a YEARS-EQUIVALENT delta from chronological age (negative = younger):
 //   1. Cardiorespiratory — resting HR + activity vs a reference peer (FitnessAgeEngine's own Nes term).
 //   2. Autonomic (HRV)   — RMSSD read against VitalityEngine's age-normative curve, inverted to "your HRV
 //                          reads like age N".
@@ -20,6 +20,17 @@ import Foundation
 //   5. Respiratory stability — night-to-night respiratory-rate variability; an early, non-specific
 //                          stress/illness signal (already used qualitatively by this app's illness
 //                          heads-up), scored quantitatively here for the first time.
+//   6. Load/recovery interaction — training load (domain 4) and HRV (domain 2) are scored independently
+//                          above, but the SAME load lands differently depending on whether the autonomic
+//                          nervous system is keeping up with it. This domain reuses RecoveryScorer's own
+//                          robust z-score ((value-mean)/(1.253*spread), the same formula the Charge ring
+//                          computes HRV-vs-personal-baseline with) against TrainingLoadEngine's own
+//                          published ACWR ceilings, so it introduces no new coefficients of its own for
+//                          "what counts as high load" or "what counts as suppressed HRV" — only the
+//                          combination is new. High load with a below-baseline HRV (unrecovered load)
+//                          costs more than the two domains would separately predict; high load with an
+//                          above-baseline HRV (load the body is visibly absorbing) is a small, deliberately
+//                          asymmetric bonus — same "penalties count more than rewards" shape as domain 4.
 //
 // KEY DESIGN FIX over the existing Fitness Age: that model is perfectly LINEAR, so one extreme input
 // (a very low resting HR) can alone swing the estimate to its hard floor with no room left for any other
@@ -76,14 +87,21 @@ public enum BiometricAgeEngine {
         public let sriPercent: Double?
         public let trainingLoadRatio: Double?   // TrainingLoadEngine.Result.ratio
         public let respRateCV: Double?          // coefficient of variation of nightly respiratory rate
+        /// Personal HRV baseline (RecoveryScorer.DriverBaseline mean/spread, e.g. from
+        /// AnalyticsEngine.ProfileBaselines.hrv) — feeds ONLY the load/recovery interaction domain (6),
+        /// never domain 2, which stays on the absolute age-normative curve. nil skips domain 6.
+        public let hrvBaselineMean: Double?
+        public let hrvBaselineSpread: Double?
         public init(chronoAge: Double, sex: String, restingHR: Double?, paIndex: Double?, rmssd: Double?,
                     sleepHours: Double?, sleepNeedHours: Double?, sleepConsistency: Double?,
-                    sriPercent: Double? = nil, trainingLoadRatio: Double?, respRateCV: Double?) {
+                    sriPercent: Double? = nil, trainingLoadRatio: Double?, respRateCV: Double?,
+                    hrvBaselineMean: Double? = nil, hrvBaselineSpread: Double? = nil) {
             self.chronoAge = chronoAge; self.sex = sex; self.restingHR = restingHR; self.paIndex = paIndex
             self.rmssd = rmssd; self.sleepHours = sleepHours; self.sleepNeedHours = sleepNeedHours
             self.sleepConsistency = sleepConsistency; self.sriPercent = sriPercent
             self.trainingLoadRatio = trainingLoadRatio
             self.respRateCV = respRateCV
+            self.hrvBaselineMean = hrvBaselineMean; self.hrvBaselineSpread = hrvBaselineSpread
         }
     }
 
@@ -160,6 +178,34 @@ public enum BiometricAgeEngine {
             // domains — this is the least individually validated signal here).
             let delta = min(3.0, max(0.0, (cv - 0.03) * 30))
             contributions.append(Contribution(key: "resp_stability", label: "Respiratory stability", deltaYears: delta))
+        }
+
+        // 6. Load/recovery interaction — see file header. Needs both a load ratio AND a usable personal
+        // HRV baseline; skips cleanly (no domain added) rather than falling back to a guessed threshold
+        // when either is missing.
+        if let ratio = inputs.trainingLoadRatio, let rmssd = inputs.rmssd,
+           let mean = inputs.hrvBaselineMean, let spread = inputs.hrvBaselineSpread, spread > 0 {
+            let hrvZ = RecoveryScorer.zScore(rmssd, mean: mean, spread: spread)
+            let delta: Double
+            if ratio >= TrainingLoadEngine.highLoadCeiling && hrvZ < 0 {
+                // Load the ACWR ceiling already flags as high, landing on an autonomic system that's
+                // reading below its own personal baseline: the load domain and HRV domain each already
+                // counted their own share, this adds only the EXTRA cost of the combination — scaled by
+                // how far over the ceiling and how far below baseline, capped well under the per-domain cap
+                // so a single interaction term can't dominate the composite the way this responds to.
+                delta = cap(min(3.0, (ratio - TrainingLoadEngine.highLoadCeiling) * 3 + abs(hrvZ) * 0.5))
+            } else if ratio > TrainingLoadEngine.sweetSpotCeiling && hrvZ > 0.5 {
+                // Load above the sweet spot that the personal HRV baseline is visibly absorbing (z > 0.5,
+                // not just "not negative") — a smaller, capped bonus; asymmetric on purpose, same
+                // "penalties outweigh rewards" shape TrainingLoadEngine's own ratio curve already uses.
+                delta = cap(-min(1.5, (ratio - TrainingLoadEngine.sweetSpotCeiling) * 1.5))
+            } else {
+                delta = 0
+            }
+            if delta != 0 {
+                contributions.append(Contribution(key: "load_recovery_interaction",
+                                                  label: "Training load vs. HRV recovery", deltaYears: delta))
+            }
         }
 
         guard contributions.count >= minDomains else { return nil }
