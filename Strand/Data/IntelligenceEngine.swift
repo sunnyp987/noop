@@ -300,10 +300,14 @@ final class IntelligenceEngine: ObservableObject {
     ///     a historical backfill week (no session data assembled for arbitrary past weeks here), which
     ///     correctly falls back to the duration-only consistency proxy — `bedWakeRegularity` needs ≥3
     ///     real nights, so an empty array always degrades cleanly rather than fabricating a value.
+    /// - keySuffix: appended to every persisted metricSeries key ("fitness_age\(keySuffix)", etc.), so a
+    ///   second, differently-windowed pass (the full-history "Lifetime" category below) can be persisted
+    ///   alongside the weekly numbers under its own keys rather than overwriting them. Empty for the
+    ///   normal weekly/backfill callers.
     private func computeAndPersistWeeklyFitnessVitality(
         weekRows: ArraySlice<DailyMetric>, weekAnchorDay: String,
         bedTimesLocalSec: [Int], wakeTimesLocalSec: [Int],
-        store: WhoopStore, computedId: String
+        store: WhoopStore, computedId: String, keySuffix: String = ""
     ) async {
         let satKey = IntelligenceEngine.saturdayKey(onOrBefore: weekAnchorDay)
 
@@ -324,8 +328,8 @@ final class IntelligenceEngine: ObservableObject {
                 paIndex: FitnessAgeEngine.physicalActivityIndexFromStrain(
                     activeDaysPerWeek: faActiveStrains.count, meanActiveStrain: faMeanActiveStrain),
                 waistCm: faWaist) {
-            var faPts = [MetricPoint(day: satKey, key: "fitness_age", value: faRes.fitnessAge)]
-            if let v = faRes.vo2max { faPts.append(MetricPoint(day: satKey, key: "vo2max_est", value: v)) }
+            var faPts = [MetricPoint(day: satKey, key: "fitness_age\(keySuffix)", value: faRes.fitnessAge)]
+            if let v = faRes.vo2max { faPts.append(MetricPoint(day: satKey, key: "vo2max_est\(keySuffix)", value: v)) }
             _ = try? await store.upsertMetricSeries(faPts, deviceId: computedId)
         }
 
@@ -338,7 +342,7 @@ final class IntelligenceEngine: ObservableObject {
             ?? VitalityEngine.sleepConsistency(nightlyHours: vNights)
         if let reg = vSleepConsistency {
             _ = try? await store.upsertMetricSeries([
-                MetricPoint(day: satKey, key: "sleep_regularity", value: reg * 100)
+                MetricPoint(day: satKey, key: "sleep_regularity\(keySuffix)", value: reg * 100)
             ], deviceId: computedId)
         }
         let vInputs = VitalityEngine.Inputs(
@@ -351,8 +355,8 @@ final class IntelligenceEngine: ObservableObject {
             steps: vSteps.isEmpty ? nil : vSteps.reduce(0, +) / Double(vSteps.count))
         if let vRes = VitalityEngine.compute(vInputs) {
             _ = try? await store.upsertMetricSeries([
-                MetricPoint(day: satKey, key: "vitality", value: vRes.vitality),
-                MetricPoint(day: satKey, key: "body_age", value: vRes.bodyAge),
+                MetricPoint(day: satKey, key: "vitality\(keySuffix)", value: vRes.vitality),
+                MetricPoint(day: satKey, key: "body_age\(keySuffix)", value: vRes.bodyAge),
             ], deviceId: computedId)
         }
     }
@@ -1126,6 +1130,22 @@ final class IntelligenceEngine: ObservableObject {
                 i += 7
             }
             UserDefaults.standard.set(true, forKey: Self.fitnessVitalityBackfillFlagKey)
+        }
+
+        // ── "Lifetime" full-data snapshot (separate category, NOT the weekly headline) ────────────────
+        // The weekly Fitness Age/Vitality above is deliberately a rolling 7-day read, never averaged
+        // across your whole history, because mixing "you a year ago" with "you now" into one number would
+        // be misleading. But a user who wants to see "what does using ALL my imported data produce" is a
+        // fair, different question — so this computes the SAME engines over the ENTIRE `hist` array in one
+        // pass and persists it under separate "_lifetime"-suffixed keys, keyed to today so it always
+        // reads as "current, using your full history" rather than any one week. Cheap (hist is already in
+        // memory), so this reruns every pass rather than being one-shot — it should track as new data
+        // arrives, not freeze at the first computation like the per-week backfill above.
+        if !hist.isEmpty {
+            await computeAndPersistWeeklyFitnessVitality(
+                weekRows: hist[...], weekAnchorDay: newestDay,
+                bedTimesLocalSec: [], wakeTimesLocalSec: [],
+                store: store, computedId: computedId, keySuffix: "_lifetime")
         }
 
         // ── Training Load Balance (Acute:Chronic Workload Ratio) ─────────────────────────────────────

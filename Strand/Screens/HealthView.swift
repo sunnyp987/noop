@@ -72,6 +72,11 @@ private struct HealthSectionsStack: View {
             // Vitality / Body Age (weekly, computed by IntelligenceEngine from the mortality-
             // hazard model). Its own view depending only on repo/profile.
             VitalitySection()
+            // Lifetime Fitness Age / Vitality: the SAME engines run over your ENTIRE imported history in
+            // one pass, instead of the rolling 7-day window the sections above use. A separate, clearly
+            // labeled category (never blended into the weekly headline) so "what does using ALL my data
+            // say" is answerable without it silently overriding "what does THIS WEEK say".
+            LifetimeSnapshotSection()
             // Training Load Balance (weekly Acute:Chronic Workload Ratio, StrandAnalytics
             // TrainingLoadEngine). Shown here UNCONDITIONALLY (not gated behind the opt-in "Your
             // cards" customiser) so a genuinely new metric isn't buried behind a discovery step —
@@ -1149,6 +1154,78 @@ private struct VitalitySection: View {
         vitality = vPts.last?.value
         vitalityWeekOf = vPts.last?.day
         bodyAge = (await repo.exploreSeries(key: "body_age", source: "my-whoop")).last?.value
+        loaded = true
+    }
+}
+
+// MARK: - Lifetime snapshot (full-history Fitness Age / Vitality, a separate category)
+
+/// A SEPARATE category from the weekly Fitness Age/Vitality above: the same StrandAnalytics engines
+/// (FitnessAgeEngine/VitalityEngine), but run over your ENTIRE imported history in one pass rather than a
+/// rolling 7-day window (see IntelligenceEngine's "_lifetime"-suffixed compute). Deliberately never
+/// blended into the weekly number — a multi-month average mixes "you a year ago" with "you now" into a
+/// figure that isn't a fair read of either, so this is presented as its own, clearly-labeled comparison
+/// point instead of a replacement.
+private struct LifetimeSnapshotSection: View {
+    @EnvironmentObject var repo: Repository
+    @EnvironmentObject var profile: ProfileStore
+    @State private var fitnessAge: Double?
+    @State private var vitality: Double?
+    @State private var bodyAge: Double?
+    @State private var loaded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("Lifetime Averages", overline: "All-time",
+                          trailing: fitnessAge != nil ? String(localized: "vs age \(profile.age)") : nil)
+            if fitnessAge != nil || vitality != nil {
+                card
+            } else if loaded {
+                ComingSoon(what: "Import more history and we can show your lifetime averages.", symbol: "infinity")
+            } else {
+                ComingSoon(what: "Reading your full history…", symbol: "infinity")
+            }
+        }
+        .task(id: repo.refreshSeq) { await load() }
+    }
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.space4) {
+            HStack(alignment: .center, spacing: NoopMetrics.space5) {
+                if let fa = fitnessAge {
+                    VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                        Text("Fitness Age").strandOverline()
+                        Text("\(Int(fa.rounded()))")
+                            .font(StrandFont.rounded(30))
+                            .foregroundStyle(StrandPalette.chargeColor)
+                    }
+                }
+                Spacer(minLength: 0)
+                if let v = vitality, let ba = bodyAge {
+                    VStack(alignment: .trailing, spacing: NoopMetrics.space1) {
+                        Text("Vitality · Body Age").strandOverline()
+                        Text("\(Int(v.rounded())) · \(Int(ba.rounded()))")
+                            .font(StrandFont.number(20))
+                            .foregroundStyle(StrandPalette.textPrimary)
+                    }
+                }
+            }
+            Divider().overlay(StrandPalette.hairline)
+            Text("Computed from every day you've ever imported or synced, not just this week — a longer-window comparison point, never the number the weekly cards above are based on.")
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+        }
+        .padding(NoopMetrics.space5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            FrostedCardSurface(tint: StrandPalette.metricPurple, cornerRadius: NoopMetrics.cardRadius)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+    }
+
+    private func load() async {
+        fitnessAge = (await repo.exploreSeries(key: "fitness_age_lifetime", source: "my-whoop")).last?.value
+        vitality = (await repo.exploreSeries(key: "vitality_lifetime", source: "my-whoop")).last?.value
+        bodyAge = (await repo.exploreSeries(key: "body_age_lifetime", source: "my-whoop")).last?.value
         loaded = true
     }
 }
