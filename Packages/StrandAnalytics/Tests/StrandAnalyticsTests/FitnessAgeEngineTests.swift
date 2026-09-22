@@ -84,6 +84,55 @@ final class FitnessAgeEngineTests: XCTestCase {
             activeDaysPerWeek: 4, meanActiveStrain: 60), 5.0, accuracy: 1e-9)
     }
 
+    // MARK: - Richer weekly-signal reconstruction (additive, backward-compatible with the strain-only path)
+
+    func testRobustRestingHRDropsFeverishOutlierNight() {
+        // A single feverish night (skin temp +1.2°C, well past the 0.8°C illness threshold) reads RHR 95 —
+        // dropping it should leave the median of the 4 genuinely resting nights, not get pulled toward 95.
+        let rhr: [Double] = [58, 60, 59, 95, 61]
+        let skin: [Double?] = [0.1, -0.1, 0.2, 1.2, 0.0]
+        XCTAssertEqual(FitnessAgeEngine.robustRestingHR(dailyRHR: rhr, skinTempDevC: skin), 59.5, accuracy: 1e-9)
+    }
+
+    func testRobustRestingHRFallsBackWhenEveryNightLooksFeverish() {
+        // Degenerate case: never return an empty/zero result over real data just because every reading
+        // that week happened to cross the threshold — fall back to the plain median instead.
+        let rhr: [Double] = [70, 72, 74]
+        let skin: [Double?] = [1.0, 1.5, 2.0]
+        XCTAssertEqual(FitnessAgeEngine.robustRestingHR(dailyRHR: rhr, skinTempDevC: skin), 72, accuracy: 1e-9)
+    }
+
+    func testRobustRestingHRWithNoTempDataMatchesPlainMedian() {
+        let rhr: [Double] = [55, 65, 60]
+        XCTAssertEqual(FitnessAgeEngine.robustRestingHR(dailyRHR: rhr, skinTempDevC: [nil, nil, nil]), 60, accuracy: 1e-9)
+    }
+
+    func testPAIndexFromDailySignalsMatchesStrainOnlyWithoutStepsOrSessions() {
+        // No steps/exercise data supplied → identical to the strain-only reconstruction (strict refinement).
+        let strainOnly = FitnessAgeEngine.physicalActivityIndexFromStrain(activeDaysPerWeek: 4, meanActiveStrain: 60)
+        let richer = FitnessAgeEngine.physicalActivityIndexFromDailySignals(activeDaysPerWeek: 4, meanActiveStrain: 60)
+        XCTAssertEqual(richer, strainOnly, accuracy: 1e-9)
+    }
+
+    func testPAIndexFromDailySignalsStepsCanRaiseDuration() {
+        // Low strain (id 1.0) but 10k steps/day (steps id 3.0) blends to 0.7·1.0 + 0.3·3.0 = 1.6,
+        // vs. strain-only's 1.0 — a long low-HR walking week should read as MORE active, not the same.
+        let strainOnly = FitnessAgeEngine.physicalActivityIndexFromStrain(activeDaysPerWeek: 4, meanActiveStrain: 30)
+        let richer = FitnessAgeEngine.physicalActivityIndexFromDailySignals(
+            activeDaysPerWeek: 4, meanActiveStrain: 30, meanDailySteps: 10000)
+        XCTAssertGreaterThan(richer, strainOnly)
+        XCTAssertEqual(richer, 2.5 * 1.6, accuracy: 1e-9)
+    }
+
+    func testPAIndexFromDailySignalsSessionCountCanRaiseFrequency() {
+        // Only 1 day crossed the strain≥30 threshold, but 3 logged exercise sessions that week (e.g. easy
+        // yoga/walks that never spiked cardiovascular strain) → frequency should reflect the higher count.
+        let richer = FitnessAgeEngine.physicalActivityIndexFromDailySignals(
+            activeDaysPerWeek: 1, meanActiveStrain: 20, exerciseSessionsPerWeek: 3)
+        // frequency(3) = 2.5, intensityDuration = strain 20/30 = 0.667 (no steps supplied)
+        XCTAssertEqual(richer, 2.5 * (20.0 / 30.0), accuracy: 1e-9)
+    }
+
     // MARK: - compute (full result + gates)
 
     func testComputeReferencePersonExactAge() {

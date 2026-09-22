@@ -312,10 +312,20 @@ final class IntelligenceEngine: ObservableObject {
         let satKey = IntelligenceEngine.saturdayKey(onOrBefore: weekAnchorDay)
 
         // ── Fitness Age (Phase 2) + VO2max ──────────────────────────────────────────────────────────
-        let faRHRs = weekRows.compactMap { $0.restingHr }.map(Double.init)
+        // RHR + its same-day skin-temp reading travel together (not two independent compactMaps) so the
+        // illness-outlier filter below compares each resting reading against the RIGHT night's temp, not
+        // a temp array that's silently drifted out of alignment after two different rows got dropped.
+        let faRHRDays = weekRows.compactMap { row -> (Double, Double?)? in
+            guard let rhr = row.restingHr else { return nil }
+            return (Double(rhr), row.skinTempDevC)
+        }
+        let faRHRs = faRHRDays.map(\.0)
         let faActiveStrains = weekRows.compactMap { $0.strain }.filter { $0 >= 30 }
         let faMeanActiveStrain = faActiveStrains.isEmpty ? 0
             : faActiveStrains.reduce(0, +) / Double(faActiveStrains.count)
+        let faSteps = weekRows.compactMap { $0.steps }.map(Double.init)
+        let faMeanSteps = faSteps.isEmpty ? nil : faSteps.reduce(0, +) / Double(faSteps.count)
+        let faExerciseDays = weekRows.filter { ($0.exerciseCount ?? 0) > 0 }.count
         let faWaist: Double? = profile.waistCm > 0 ? profile.waistCm : nil
         let faReady = FitnessAgeEngine.assessReadiness(
             hasAge: profile.age > 0, hasSex: !profile.sex.isEmpty,
@@ -324,9 +334,11 @@ final class IntelligenceEngine: ObservableObject {
         if faReady.canCompute,
            let faRes = FitnessAgeEngine.compute(
                 age: Double(profile.age), sex: profile.sex,
-                restingHR: IntelligenceEngine.medianOf(faRHRs),
-                paIndex: FitnessAgeEngine.physicalActivityIndexFromStrain(
-                    activeDaysPerWeek: faActiveStrains.count, meanActiveStrain: faMeanActiveStrain),
+                restingHR: FitnessAgeEngine.robustRestingHR(
+                    dailyRHR: faRHRs, skinTempDevC: faRHRDays.map(\.1)),
+                paIndex: FitnessAgeEngine.physicalActivityIndexFromDailySignals(
+                    activeDaysPerWeek: faActiveStrains.count, meanActiveStrain: faMeanActiveStrain,
+                    exerciseSessionsPerWeek: faExerciseDays, meanDailySteps: faMeanSteps),
                 waistCm: faWaist) {
             var faPts = [MetricPoint(day: satKey, key: "fitness_age\(keySuffix)", value: faRes.fitnessAge)]
             if let v = faRes.vo2max { faPts.append(MetricPoint(day: satKey, key: "vo2max_est\(keySuffix)", value: v)) }

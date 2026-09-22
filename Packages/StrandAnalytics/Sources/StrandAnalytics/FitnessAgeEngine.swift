@@ -139,6 +139,64 @@ public enum FitnessAgeEngine {
         return frequency * intensityDuration
     }
 
+    /// A resting-HR read more robust to a single bad night than a flat median: drops any day whose
+    /// skin-temperature deviation reads clearly feverish (> 0.8°C above baseline — the same threshold
+    /// this app's own illness heads-up already uses) before taking the median of what's left. One sick
+    /// night's elevated RHR shouldn't skew the whole week's "resting" reading the equation compares
+    /// against a healthy reference peer — this doesn't change what the equation does with RHR, only
+    /// which nights count as a genuine resting reading. Falls back to the unfiltered median if every
+    /// night that week happens to look feverish (never returns an empty result over real data).
+    public static func robustRestingHR(dailyRHR: [Double], skinTempDevC: [Double?]) -> Double {
+        guard !dailyRHR.isEmpty else { return 0 }
+        let paired = zip(dailyRHR, skinTempDevC.count == dailyRHR.count ? skinTempDevC : Array(repeating: nil, count: dailyRHR.count))
+        let filtered = paired.filter { (($1 ?? 0) <= 0.8) }.map(\.0)
+        return median(filtered.isEmpty ? dailyRHR : filtered)
+    }
+
+    /// Richer PA-index reconstruction than `physicalActivityIndexFromStrain` alone: folds in the on-device
+    /// step total and logged exercise-session count (WHOOP v11 daily activity columns) when the data
+    /// source provides them, instead of strain being the only signal. Still the exact same HUNT1 PA-Q
+    /// frequency×intensity×duration product — this only makes the RECONSTRUCTION of those three factors
+    /// truer to what actually happened that week, using more of what's already being synced:
+    ///   • frequency: the LARGER of "days with strain ≥ 30" and logged exercise-session count — catches a
+    ///     real session (a long walk, yoga) that never spikes cardiovascular strain past the threshold.
+    ///   • intensity×duration: blends the strain-derived estimate with a steps-derived one (10k steps/day
+    ///     reads as the HUNT scale's top duration bucket) — strain alone under-reads low-HR, high-volume
+    ///     activity that a pure heart-rate integral doesn't weight the same way a HUNT PA-Q respondent
+    ///     would. Falls back to the strain-only estimate when steps/session data isn't available (older
+    ///     imports, non-WHOOP sources), so this is a strict refinement, never a regression.
+    public static func physicalActivityIndexFromDailySignals(
+        activeDaysPerWeek: Int, meanActiveStrain: Double,
+        exerciseSessionsPerWeek: Int? = nil, meanDailySteps: Double? = nil
+    ) -> Double {
+        let frequencyDays = max(activeDaysPerWeek, exerciseSessionsPerWeek ?? 0)
+        let frequency: Double
+        switch frequencyDays {
+        case ..<1: frequency = 0.0
+        case 1:    frequency = 0.5
+        case 2:    frequency = 1.0
+        case 3...4: frequency = 2.5
+        default:   frequency = 5.0
+        }
+        if frequency == 0 { return 0 }
+        let strainID = min(3.0, max(0.0, meanActiveStrain / 30.0))
+        let intensityDuration: Double
+        if let steps = meanDailySteps, steps > 0 {
+            let stepsID = min(3.0, max(0.0, steps / 3333.0))   // 10k steps/day -> 3.0 (HUNT's top bucket)
+            intensityDuration = strainID * 0.7 + stepsID * 0.3
+        } else {
+            intensityDuration = strainID
+        }
+        return frequency * intensityDuration
+    }
+
+    private static func median(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+    }
+
     /// Full Fitness Age from already-aggregated weekly inputs. Returns nil only if RHR or age is
     /// missing (the headline number needs nothing else). `vo2max` is filled only when a waist
     /// measurement is supplied; callers gate data-coverage (≥4 of 7 days) separately.
