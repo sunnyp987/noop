@@ -30,6 +30,7 @@ struct LiquidTodayView: View {
     @State private var stress: Double?             // StressModel(...).score, 0–3
     @State private var fitnessAge: Double?         // exploreSeries("fitness_age").last
     @State private var vitality: Double?           // exploreSeries("vitality").last
+    @State private var vo2max: Double?             // exploreSeries("vo2max_est").last, mL/kg/min
     @State private var stepsEst: Double?           // steps_est, day-keyed to the selected day (fallback)
     @State private var hrValues: [Double] = []     // hrBuckets since midnight → 5-min means
     @State private var workouts: [WorkoutRow] = [] // newest-first
@@ -501,6 +502,9 @@ struct LiquidTodayView: View {
         case .vitality:
             cardLink(dest: metricDetail("vitality"), title: card.title, sub: card.subtitle,
                      value: intText(vitality), tint: liquidPurple, frac: frac(vitality))
+        case .vo2max:
+            cardLink(dest: metricDetail("vo2max_est"), title: card.title, sub: card.subtitle,
+                     value: unitText(vo2max, card.unit), tint: StrandPalette.metricPurple, frac: fracOver(vo2max, 60))
         case .hrv:
             cardLink(dest: metricDetail("hrv"), title: card.title, sub: card.subtitle,
                      value: unitText(displayDay?.avgHrv, card.unit), tint: StrandPalette.metricCyan,
@@ -831,6 +835,7 @@ struct LiquidTodayView: View {
         async let stressA = repo.series(key: "stress", source: "my-whoop")
         async let fitA = repo.exploreSeries(key: "fitness_age", source: "my-whoop")
         async let vitA = repo.exploreSeries(key: "vitality", source: "my-whoop")
+        async let vo2A = repo.exploreSeries(key: "vo2max_est", source: "my-whoop")
         async let stepsA = repo.exploreSeries(key: "steps_est", source: "my-whoop")
         async let hrA = repo.hrBuckets(from: from, to: to, bucketSeconds: 300)
         async let wkA = repo.workoutRows()
@@ -855,6 +860,7 @@ struct LiquidTodayView: View {
         }.value
         fitnessAge = (await fitA).last?.value   // history-wide latest banked (not day-scoped)
         vitality = (await vitA).last?.value
+        vo2max = (await vo2A).last?.value
         // Steps is a DAILY metric, so key it to the SELECTED day (like restScore above), not the history-wide
         // latest. Without this, swiping to a past day with no strap step count showed today's estimate (the
         // `.last` value) instead of that day's. Mirrors the classic Today's stepsEstByDay[selectedDayKey].
