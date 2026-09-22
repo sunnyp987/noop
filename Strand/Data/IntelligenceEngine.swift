@@ -202,7 +202,10 @@ final class IntelligenceEngine: ObservableObject {
     /// UserDefaults flag guarding the one-shot full-history Fitness Age / Vitality backfill (see
     /// `computeAndPersistWeeklyFitnessVitality` and its call sites in `analyzeRecent`). Set once the
     /// backfill completes so a large import's history isn't re-walked on every subsequent pass.
-    static let fitnessVitalityBackfillFlagKey = "intelligence.fitnessVitalityBackfill.v1.done"
+    /// Bumped to v2: a prior build could have already marked v1 "done" from a run that predated the
+    /// `importWhoop()` → `analyzeRecent()` fix and the full-history (vs `[oldestDay, newestDay]`-windowed)
+    /// pool fix, which would silently and permanently skip the corrected backfill on every later launch.
+    static let fitnessVitalityBackfillFlagKey = "intelligence.fitnessVitalityBackfill.v2.done"
 
     /// One-shot, on-upgrade FULL-history Effort rescore (#313 PART B). The Effort hero gauge + numbers
     /// moved from the old 0–21 axis to Baseline's own 0–100 axis. On-device computed rows since v2.6.1
