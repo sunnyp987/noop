@@ -89,15 +89,15 @@ final class LabMarkerCsvImportTests: XCTestCase {
     func testUnknownMarkerImportsAsCustom() {
         let csv = """
         date,marker,value,unit
-        2026-05-01,Magnesium,0.84,mmol/L
+        2026-05-01,Zorblatt Factor,0.84,mmol/L
         """
         let result = LabMarkerCsvImport.parse(text: csv)
         XCTAssertEqual(result.importedReadings, 1)
         let row = result.rows[0]
-        XCTAssertEqual(row.markerKey, "custom_magnesium")   // MarkerUnits.slug parity
+        XCTAssertEqual(row.markerKey, "custom_zorblatt_factor")   // MarkerUnits.slug parity
         XCTAssertEqual(row.category, .other)
         XCTAssertTrue(row.isCustomMarker)
-        XCTAssertEqual(result.customMarkerKeys, ["custom_magnesium"])
+        XCTAssertEqual(result.customMarkerKeys, ["custom_zorblatt_factor"])
     }
 
     // MARK: - Blood pressure pairs (diastolic must never be dropped)
