@@ -1,6 +1,7 @@
 import SwiftUI
 import StrandDesign
 import StrandImport
+import StrandAnalytics
 import WhoopStore
 
 // MARK: - Lab Book document-scan review (source "lab-document")
