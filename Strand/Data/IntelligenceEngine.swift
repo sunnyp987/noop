@@ -968,10 +968,18 @@ final class IntelligenceEngine: ObservableObject {
         // computations: it does NOT touch `dailies` itself (no new computed-source row is written for a
         // WHOOP-import day, and the Charge/Rest fold above is untouched), so a real WHOOP score is never
         // second-guessed , this only widens what Fitness Age / Vitality are allowed to look at.
-        let whoopImportRows = ((try? await store.dailyMetrics(deviceId: deviceId, from: oldestDay, to: newestDay)) ?? [])
+        //
+        // Reuses `hist` (the SAME full, unwindowed WHOOP-import read already loaded above for the HRV/RHR
+        // baseline seed) rather than a fresh `[oldestDay, newestDay]`-bounded query: that window is only
+        // `maxDays` (default 21) back from the REAL current date, so an import whose most recent day is
+        // weeks or months old (no live strap wear since) would be entirely outside it and this fold would
+        // silently do nothing , exactly the WHOOP official app does NOT require: it keeps showing your
+        // last-known WHOOP Age / Healthspan figures whether or not you've worn the strap recently. Taking
+        // the last 7 days of `hist` instead means "your most recent available week," however old, the
+        // same honest-about-being-a-snapshot approach, not a demand for data from literally today.
         var faVitalityPool = dailies
         let dailiesCoveredDays = Set(dailies.map { $0.day })
-        for row in whoopImportRows where !dailiesCoveredDays.contains(row.day) {
+        for row in hist where !dailiesCoveredDays.contains(row.day) {
             faVitalityPool.append(row)
         }
 
@@ -982,6 +990,10 @@ final class IntelligenceEngine: ObservableObject {
         // and finalises on Saturday. Engine = FitnessAgeEngine (StrandAnalytics), fully unit-tested; the
         // body term cancels so the headline needs no body metric.
         let fa7 = faVitalityPool.sorted { $0.day < $1.day }.suffix(7)
+        // The Saturday the computed point is KEYED to: the actual week `fa7`'s data falls in, not
+        // necessarily this week , so a fold from an old import reads as "the week of <that data>" in
+        // Trends/history, never implied to be a fresh, current-week computation it isn't.
+        let faVitalityWeekAnchor = fa7.last?.day ?? newestDay
         let faRHRs = fa7.compactMap { $0.restingHr }.map(Double.init)
         let faActiveStrains = fa7.compactMap { $0.strain }.filter { $0 >= 30 }
         let faMeanActiveStrain = faActiveStrains.isEmpty ? 0
@@ -998,7 +1010,7 @@ final class IntelligenceEngine: ObservableObject {
                 paIndex: FitnessAgeEngine.physicalActivityIndexFromStrain(
                     activeDaysPerWeek: faActiveStrains.count, meanActiveStrain: faMeanActiveStrain),
                 waistCm: faWaist) {
-            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: newestDay)
+            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
             var faPts = [MetricPoint(day: satKey, key: "fitness_age", value: faRes.fitnessAge)]
             if let v = faRes.vo2max { faPts.append(MetricPoint(day: satKey, key: "vo2max_est", value: v)) }
             _ = try? await store.upsertMetricSeries(faPts, deviceId: computedId)
@@ -1042,7 +1054,7 @@ final class IntelligenceEngine: ObservableObject {
                                                                  wakeTimesLocalSec: wakeTimesLocalSec)
             ?? VitalityEngine.sleepConsistency(nightlyHours: vNights)
         if let reg = vSleepConsistency {
-            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: newestDay)
+            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
             _ = try? await store.upsertMetricSeries([
                 MetricPoint(day: satKey, key: "sleep_regularity", value: reg * 100)
             ], deviceId: computedId)
@@ -1056,7 +1068,7 @@ final class IntelligenceEngine: ObservableObject {
             rmssdNorm: VitalityEngine.rmssdNorm(forAge: Double(profile.age)),
             steps: vSteps.isEmpty ? nil : vSteps.reduce(0, +) / Double(vSteps.count))
         if let vRes = VitalityEngine.compute(vInputs) {
-            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: newestDay)
+            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
             _ = try? await store.upsertMetricSeries([
                 MetricPoint(day: satKey, key: "vitality", value: vRes.vitality),
                 MetricPoint(day: satKey, key: "body_age", value: vRes.bodyAge),

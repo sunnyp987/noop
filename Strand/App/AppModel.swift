@@ -1707,6 +1707,12 @@ final class AppModel: ObservableObject {
                                                                    deviceId: deviceId, trace: importTraceSink())
                 try? await store.checkpointWAL()   // reclaim the WAL a bulk import grew (#590)
                 await repo.refresh()
+                // Re-run the on-device scoring pass now, not just a display refresh: the WHOOP-import
+                // fold that feeds Fitness Age / Vitality (and any aggregate-import Charge/Rest scoring)
+                // lives inside analyzeRecent(), which otherwise wouldn't run again until the NEXT
+                // unrelated trigger (BLE sync, the 15-min timer, app relaunch) - so a fresh import could
+                // sit fully imported but unscored for a long, unpredictable wait with no visible reason.
+                await intelligence.analyzeRecent()
                 let span: String
                 if let a = summary.earliest, let b = summary.latest {
                     let f = DateFormatter(); f.dateFormat = "MMM yyyy"
