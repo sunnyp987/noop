@@ -214,6 +214,17 @@ public enum LabResultDocumentImport {
         if unit == nil, remainderStart < tokens.count, isUnitLike(tokens[remainderStart]) {
             unit = tokens[remainderStart]
             remainderStart += 1
+        } else if unit == nil {
+            // Quest (and other providers) often print "VALUE  LOW-HIGH  UNIT" on one line — the
+            // unit trails the reference range, not the value. A reference range itself never
+            // looks like a real unit (no letters/%/^ — see isUnitLike), so the loose check above
+            // correctly skips it; this widened pass only fires when that happened, and only
+            // trusts a STRONG unit token (contains "/", "%", "^", or a known bare-unit word) so it
+            // can't misfire on ordinary reference-range prose ("OR", "TO", "SEE", "NOTE").
+            for i in (vIdx + 1)..<min(tokens.count, vIdx + 1 + unitSearchWindow) where isStrongUnitLike(tokens[i]) {
+                unit = tokens[i]
+                break
+            }
         }
         let remainder = tokens[remainderStart...].joined(separator: " ").trimmingCharacters(in: .whitespaces)
         let referenceText = remainder.isEmpty ? nil : String(remainder.prefix(80))
@@ -250,6 +261,24 @@ public enum LabResultDocumentImport {
         if ["H", "L", "HIGH", "LOW", "NORMAL", "ABNORMAL", "A", "N"].contains(upper) { return false }
         if LabMarkerCsvImport.parseValue(tok) != nil { return false }
         return tok.contains { $0.isLetter || "%µ/^".contains($0) }
+    }
+
+    /// How many tokens past the value to look for a unit that trails a reference range
+    /// ("VALUE  7-25  mg/dL") before giving up — a Quest report's range + flag + lab-site
+    /// code rarely runs longer than this.
+    private static let unitSearchWindow = 6
+
+    /// A STRICTER unit check for the widened post-range search: `isUnitLike` accepts any token
+    /// with a letter in it, which is safe when it only ever looks at the ONE token right after
+    /// the value, but would happily misread reference-range prose ("OR", "TO", "SEE", "NOTE")
+    /// as a unit once the search widens. Real lab units overwhelmingly carry a "/", "%", or "^"
+    /// (mg/dL, mmol/L, 10^9/L, %) or are one of a handful of bare words — nothing else qualifies.
+    private static let bareUnitWords: Set<String> = ["mmhg", "fl", "score", "ratio", "index", "titer"]
+
+    private static func isStrongUnitLike(_ tok: String) -> Bool {
+        guard tok.count > 1 else { return false }
+        if tok.contains("/") || tok.contains("%") || tok.contains("^") { return true }
+        return bareUnitWords.contains(tok.lowercased())
     }
 
     // MARK: - Whole-document report date
