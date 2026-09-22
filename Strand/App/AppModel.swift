@@ -1523,7 +1523,12 @@ final class AppModel: ObservableObject {
     /// declared-fusable metric's latest per-source daily value, runs the pure `FusionResolver`, and maps
     /// the result into the view's `FusedRecord`. Honest single-source degradation falls out of the engine
     /// (a one-WHOOP user gets `.single` agreement and `contributingSourceCount == 1`).
-    func buildTodayFusedRecord() async -> FusedRecord {
+    /// - Parameter day: the calendar day to build the fused record for, as a "yyyy-MM-dd" local day key
+    ///   (matches `Repository.dayString`). nil (the default) means "today" — the original behavior, kept
+    ///   so existing callers are unaffected. Passing a past day lets a historical WHOOP-imported date be
+    ///   compared the same way "today" already was; the read window shifts to centre on that day instead
+    ///   of `Date()`.
+    func buildTodayFusedRecord(day: String? = nil) async -> FusedRecord {
         guard let store = await repo.storeHandle() else {
             return FusedRecord(rows: [], dayOwner: nil, contributingSourceCount: 0)
         }
@@ -1545,9 +1550,10 @@ final class AppModel: ObservableObject {
             (.xiaomiBand, FusionSource.xiaomiBand.rawValue),
         ]
 
-        let now = Date()
-        let fromDay = Repository.dayString(now.addingTimeInterval(-3 * 86_400))
-        let toDay = Repository.dayString(now.addingTimeInterval(86_400))
+        // Centre the read window on the requested day (or today when nil), same ±window as before.
+        let anchor = day.flatMap { Repository.date(fromDay: $0) } ?? Date()
+        let fromDay = Repository.dayString(anchor.addingTimeInterval(-3 * 86_400))
+        let toDay = Repository.dayString(anchor.addingTimeInterval(86_400))
 
         // Read each source's daily rows once, then pick the freshest per metric for the latest day.
         var rowsBySource: [FusionSource: DailyMetric] = [:]

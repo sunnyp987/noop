@@ -958,12 +958,30 @@ final class IntelligenceEngine: ObservableObject {
         }
         if !restPoints.isEmpty { _ = try? await store.upsertMetricSeries(restPoints, deviceId: computedId) }
 
+        // ── Fitness Age / Vitality input pool: fold in WHOOP-imported raw values ─────────────────────
+        // `dailies` only carries days the raw-HR loop scored, or the wearable-import fold above scored ,
+        // and that fold DELIBERATELY skips WHOOP-import days (it must never second-guess a real WHOOP
+        // score). So a WHOOP-import-only user (no BLE sync at all) has an EMPTY `dailies`, and the weekly
+        // Fitness Age / Vitality rollups below (which only read `dailies`) never get enough input to pass
+        // their minimum-coverage gates , even though their imported history has everything those engines
+        // need (resting HR, HRV, sleep, steps). This pool is ONLY for those two read-only weekly
+        // computations: it does NOT touch `dailies` itself (no new computed-source row is written for a
+        // WHOOP-import day, and the Charge/Rest fold above is untouched), so a real WHOOP score is never
+        // second-guessed , this only widens what Fitness Age / Vitality are allowed to look at.
+        let whoopImportRows = ((try? await store.dailyMetrics(deviceId: deviceId, from: oldestDay, to: newestDay)) ?? [])
+        var faVitalityPool = dailies
+        let dailiesCoveredDays = Set(dailies.map { $0.day })
+        for row in whoopImportRows where !dailiesCoveredDays.contains(row.day) {
+            faVitalityPool.append(row)
+        }
+
         // ── Fitness Age (Phase 2) , weekly, keyed to the week's Saturday ────────────────────────────
-        // Roll the last 7 computed days into the Nes/HUNT inputs and upsert a weekly Fitness Age (+ an
-        // optional VO₂max when a waist is set) under the same "-noop" source. Idempotent on the Saturday
-        // key, so the number refines through the week and finalises on Saturday. Engine = FitnessAgeEngine
-        // (StrandAnalytics), fully unit-tested; the body term cancels so the headline needs no body metric.
-        let fa7 = dailies.sorted { $0.day < $1.day }.suffix(7)
+        // Roll the last 7 days (computed + folded-in WHOOP-import, see faVitalityPool above) into the
+        // Nes/HUNT inputs and upsert a weekly Fitness Age (+ an optional VO₂max when a waist is set) under
+        // the same "-noop" source. Idempotent on the Saturday key, so the number refines through the week
+        // and finalises on Saturday. Engine = FitnessAgeEngine (StrandAnalytics), fully unit-tested; the
+        // body term cancels so the headline needs no body metric.
+        let fa7 = faVitalityPool.sorted { $0.day < $1.day }.suffix(7)
         let faRHRs = fa7.compactMap { $0.restingHr }.map(Double.init)
         let faActiveStrains = fa7.compactMap { $0.strain }.filter { $0 >= 30 }
         let faMeanActiveStrain = faActiveStrains.isEmpty ? 0
@@ -1275,6 +1293,11 @@ final class IntelligenceEngine: ObservableObject {
         _ = try? await store.deleteWorkouts(deviceId: computedId, sport: "detected",
                                             from: windowStart, to: now)
         if !workoutRows.isEmpty { _ = try? await store.upsertWorkouts(workoutRows, deviceId: computedId) }
+        // Local "workout detected" notification. WorkoutDetectionNotifier itself dedupes against
+        // already-notified bouts (see its doc comment), so passing the FULL current-pass set on every
+        // call is safe , this never re-notifies for a bout it already told the user about.
+        WorkoutDetectionNotifier.notifyNewDetections(
+            workoutRows.map { (startTs: $0.startTs, durationS: $0.durationS, avgHr: $0.avgHr) })
 
         // #137: a manually-started workout is scored from sparse live HR at save time , near-zero
         // calories/strain on a 5/MG. Now that offloaded HR may cover the window, re-score the

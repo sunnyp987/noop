@@ -16,19 +16,35 @@ import WhoopProtocol
 
 // MARK: - Fused record host ("Your Data, Fused")
 
-/// Loads today's fused record via `AppModel.buildTodayFusedRecord()` (the additive multi-device
-/// adapter) and feeds `FusedRecordView`. Re-loads when fresh data lands (`repo.refreshSeq`).
+/// Loads a day's fused record via `AppModel.buildTodayFusedRecord(day:)` (the additive multi-device
+/// adapter) and feeds `FusedRecordView`. Re-loads when fresh data lands (`repo.refreshSeq`) or the
+/// viewed day changes. Defaults to today; ◀/▶ browse a historical WHOOP-imported day the same way
+/// (#comparing an import against Baseline's own numbers isn't limited to today, per user request).
 struct FusedRecordHost: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var repo: Repository
 
+    /// Days back from today (0 = today). Only moved by the ◀/▶ controls below.
+    @State private var dayOffset = 0
     @State private var record = FusedRecord(rows: [], dayOwner: nil, contributingSourceCount: 0)
     @State private var loaded = false
+
+    private var viewedDay: String {
+        Repository.dayString(Date().addingTimeInterval(-Double(dayOffset) * 86_400))
+    }
+
+    private var dayLabel: String {
+        switch dayOffset {
+        case 0: return String(localized: "Today")
+        case 1: return String(localized: "Yesterday")
+        default: return String(localized: "\(dayOffset) days ago")
+        }
+    }
 
     var body: some View {
         Group {
             if loaded {
-                FusedRecordView(record: record)
+                FusedRecordView(record: record, dayLabel: dayLabel)
             } else {
                 ScreenScaffold(title: "Your Data, Fused",
                                subtitle: "Building your best-sourced record…") {
@@ -36,10 +52,33 @@ struct FusedRecordHost: View {
                 }
             }
         }
-        .task(id: repo.refreshSeq) {
-            record = await model.buildTodayFusedRecord()
+        .toolbar {
+            #if os(iOS)
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                dayNavButtons
+            }
+            #else
+            ToolbarItemGroup {
+                dayNavButtons
+            }
+            #endif
+        }
+        .task(id: "\(dayOffset)|\(repo.refreshSeq)") {
+            record = await model.buildTodayFusedRecord(day: viewedDay)
             loaded = true
         }
+    }
+
+    @ViewBuilder private var dayNavButtons: some View {
+        Button { dayOffset += 1 } label: {
+            Image(systemName: "chevron.left")
+        }
+        .accessibilityLabel("Previous day")
+        Button { if dayOffset > 0 { dayOffset -= 1 } } label: {
+            Image(systemName: "chevron.right")
+        }
+        .disabled(dayOffset == 0)
+        .accessibilityLabel("Next day")
     }
 }
 

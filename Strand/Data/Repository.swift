@@ -2473,6 +2473,11 @@ final class Repository: ObservableObject {
 
     static func dayString(_ d: Date) -> String { dayFormatter.string(from: d) }
 
+    /// Inverse of `dayString`: the local midnight `Date` for a "yyyy-MM-dd" day key, or nil when it
+    /// isn't a parseable ISO date. Lets a caller that only has a day key (e.g. day-navigation state)
+    /// recover a `Date` to do calendar arithmetic against, the same formatter `dayString` uses.
+    static func date(fromDay day: String) -> Date? { dayFormatter.date(from: day) }
+
     /// The "yyyy-MM-dd" day one calendar day AFTER `day`, or `day` verbatim when it isn't a parseable
     /// ISO date (e.g. a wide-open sentinel already past every real day, so no buffer is needed). Backs the
     /// +1-day daily read buffer in `resolvedRows` so a wake-day-keyed night that sorts just past the
