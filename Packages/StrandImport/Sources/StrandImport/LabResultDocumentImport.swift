@@ -111,6 +111,7 @@ public enum LabResultDocumentImport {
         if capped.count > maxChars { capped = String(capped.prefix(maxChars)); truncated = true }
         var lines = capped.components(separatedBy: .newlines)
         if lines.count > maxLines { lines = Array(lines.prefix(maxLines)); truncated = true }
+        lines = stitchWrappedTestNames(lines)
 
         var found: [DetectedRow] = []
         var unrecognized = 0
@@ -140,6 +141,38 @@ public enum LabResultDocumentImport {
 
         return Result(rows: deduped, detectedDay: detectReportDay(in: capped),
                       unrecognizedLineCount: unrecognized, unrecognizedSamples: samples, truncated: truncated)
+    }
+
+    // MARK: - Multi-line test names
+
+    /// A wrapped-header-then-value layout ("SEX HORMONE BINDING" on its own line, "GLOBULIN  30  10-50
+    /// nmol/L" on the next) reads, line-by-line, as a bare "GLOBULIN" result — which collides with the
+    /// unrelated liver-panel Globulin marker and would silently mislabel an SHBG reading. Only a couple
+    /// of report names wrap like this; rather than resolve one line at a time, stitch a known header-only
+    /// line onto the row that follows it before parsing, so the full name resolves as a whole.
+    private static let wrappedNameHeads: [(header: String, continuation: String)] = [
+        ("SEX HORMONE BINDING", "GLOBULIN"),
+    ]
+
+    static func stitchWrappedTestNames(_ lines: [String]) -> [String] {
+        guard !lines.isEmpty else { return lines }
+        var out: [String] = []
+        var i = 0
+        while i < lines.count {
+            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+            if let match = wrappedNameHeads.first(where: { trimmed.caseInsensitiveCompare($0.header) == .orderedSame }),
+               i + 1 < lines.count {
+                let next = lines[i + 1].trimmingCharacters(in: .whitespaces)
+                if next.uppercased().hasPrefix(match.continuation) {
+                    out.append("\(match.header) \(next)")
+                    i += 2
+                    continue
+                }
+            }
+            out.append(lines[i])
+            i += 1
+        }
+        return out
     }
 
     // MARK: - Per-line parsing

@@ -134,6 +134,7 @@ public enum MarkerCatalog {
         // Extended liver
         .init(key: "total_bilirubin", displayName: "Total bilirubin", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 1, referenceTextHint: fromReport),
         .init(key: "direct_bilirubin", displayName: "Direct bilirubin", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 1, referenceTextHint: fromReport),
+        .init(key: "indirect_bilirubin", displayName: "Indirect bilirubin", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 1, referenceTextHint: fromReport),
         .init(key: "total_protein", displayName: "Total protein", category: .bloodPanel, canonicalUnit: "g/L", decimals: 0, referenceTextHint: fromReport),
         .init(key: "globulin", displayName: "Globulin", category: .bloodPanel, canonicalUnit: "g/L", decimals: 0, referenceTextHint: fromReport),
         .init(key: "ag_ratio", displayName: "Albumin/globulin ratio", category: .bloodPanel, canonicalUnit: "ratio", decimals: 2, referenceTextHint: fromReport),
@@ -166,6 +167,8 @@ public enum MarkerCatalog {
         .init(key: "reverse_t3", displayName: "Reverse T3", category: .bloodPanel, canonicalUnit: "nmol/L", decimals: 2, referenceTextHint: fromReport),
         .init(key: "tpo_antibodies", displayName: "Thyroid peroxidase antibodies (TPO)", category: .bloodPanel, canonicalUnit: "IU/mL", decimals: 0, referenceTextHint: fromReport),
         .init(key: "thyroglobulin_antibodies", displayName: "Thyroglobulin antibodies", category: .bloodPanel, canonicalUnit: "IU/mL", decimals: 0, referenceTextHint: fromReport),
+        .init(key: "t3_uptake", displayName: "T3 uptake", category: .bloodPanel, canonicalUnit: "%", decimals: 0, referenceTextHint: fromReport),
+        .init(key: "free_t4_index", displayName: "Free T4 index (T7)", category: .bloodPanel, canonicalUnit: "index", decimals: 1, referenceTextHint: fromReport),
         // Hormones
         .init(key: "testosterone_total", displayName: "Testosterone, total", category: .bloodPanel, canonicalUnit: "nmol/L", decimals: 1, referenceTextHint: fromReport),
         .init(key: "testosterone_free", displayName: "Testosterone, free", category: .bloodPanel, canonicalUnit: "pmol/L", decimals: 0, referenceTextHint: fromReport),
@@ -179,6 +182,7 @@ public enum MarkerCatalog {
         .init(key: "prolactin", displayName: "Prolactin", category: .bloodPanel, canonicalUnit: "mIU/L", decimals: 0, referenceTextHint: fromReport),
         .init(key: "igf_1", displayName: "IGF-1", category: .bloodPanel, canonicalUnit: "nmol/L", decimals: 1, referenceTextHint: fromReport),
         .init(key: "psa", displayName: "PSA (prostate-specific antigen)", category: .bloodPanel, canonicalUnit: "µg/L", decimals: 2, referenceTextHint: fromReport),
+        .init(key: "testosterone_bioavailable", displayName: "Testosterone, bioavailable", category: .bloodPanel, canonicalUnit: "nmol/L", decimals: 1, referenceTextHint: fromReport),
         // Extended vitamins + inflammation
         .init(key: "vitamin_a", displayName: "Vitamin A", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 2, referenceTextHint: fromReport),
         .init(key: "vitamin_e", displayName: "Vitamin E", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 1, referenceTextHint: fromReport),
@@ -302,7 +306,7 @@ public enum MarkerCatalog {
         ])
         tag("Kidney", ["egfr", "creatinine", "bun", "bun_creatinine_ratio", "cystatin_c", "cystatin_c_egfr"])
         tag("Liver & protein", [
-            "alt", "ast", "ggt", "total_bilirubin", "direct_bilirubin", "total_protein",
+            "alt", "ast", "ggt", "total_bilirubin", "direct_bilirubin", "indirect_bilirubin", "total_protein",
             "globulin", "ag_ratio", "alkaline_phosphatase", "albumin",
         ])
         tag("Electrolytes & minerals", [
@@ -311,10 +315,10 @@ public enum MarkerCatalog {
         ])
         tag("Thyroid", [
             "tsh", "free_t4", "free_t3", "total_t3", "total_t4", "reverse_t3",
-            "tpo_antibodies", "thyroglobulin_antibodies",
+            "tpo_antibodies", "thyroglobulin_antibodies", "t3_uptake", "free_t4_index",
         ])
         tag("Hormones", [
-            "testosterone_total", "testosterone_free", "shbg", "estradiol", "progesterone",
+            "testosterone_total", "testosterone_free", "testosterone_bioavailable", "shbg", "estradiol", "progesterone",
             "dhea_s", "cortisol", "lh", "fsh", "prolactin", "igf_1", "psa",
         ])
         tag("Vitamins", [
