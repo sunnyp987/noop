@@ -199,6 +199,11 @@ final class IntelligenceEngine: ObservableObject {
     /// pass completes so it never re-runs.
     static let effortRescoreFlagKey = "intelligence.effortRescore.v313.done"
 
+    /// UserDefaults flag guarding the one-shot full-history Fitness Age / Vitality backfill (see
+    /// `computeAndPersistWeeklyFitnessVitality` and its call sites in `analyzeRecent`). Set once the
+    /// backfill completes so a large import's history isn't re-walked on every subsequent pass.
+    static let fitnessVitalityBackfillFlagKey = "intelligence.fitnessVitalityBackfill.v1.done"
+
     /// One-shot, on-upgrade FULL-history Effort rescore (#313 PART B). The Effort hero gauge + numbers
     /// moved from the old 0–21 axis to Baseline's own 0–100 axis. On-device computed rows since v2.6.1
     /// already store 0–100, but rows the engine computed on an OLDER build (capped at `maxDays` per run,
@@ -274,6 +279,79 @@ final class IntelligenceEngine: ObservableObject {
         UserDefaults.standard.set(true, forKey: Self.timestampHealFlagKey)
         // Clear the re-pollution request now that this re-heal has run , a future bad-clock sync re-arms it.
         UserDefaults.standard.set(false, forKey: Self.timestampHealPendingKey)
+    }
+
+    /// Compute + persist ONE week's Fitness Age, VO2max, sleep regularity, Vitality, and Body Age, from
+    /// an explicit set of daily rows — shared by `analyzeRecent`'s "this week" computation and its
+    /// full-history backfill, so both paths compute identically and a historical week is never scored
+    /// by different rules than today's.
+    ///
+    /// - Parameters:
+    ///   - weekRows: the (up to) 7 daily rows for this week, any order.
+    ///   - weekAnchorDay: the "yyyy-MM-dd" day the resulting points are keyed to (via
+    ///     `saturdayKey(onOrBefore:)`) — the actual week the data is FROM, not necessarily the real
+    ///     current week, so a backfilled or stale-import week reads as "the week of <that data>" in
+    ///     Trends/history rather than implying a fresh, current computation it isn't.
+    ///   - bedTimesLocalSec/wakeTimesLocalSec: real per-night session clock-times for THIS week's sleep
+    ///     regularity, when available (the current-week caller has them from `scoredNights`). Empty for
+    ///     a historical backfill week (no session data assembled for arbitrary past weeks here), which
+    ///     correctly falls back to the duration-only consistency proxy — `bedWakeRegularity` needs ≥3
+    ///     real nights, so an empty array always degrades cleanly rather than fabricating a value.
+    private func computeAndPersistWeeklyFitnessVitality(
+        weekRows: ArraySlice<DailyMetric>, weekAnchorDay: String,
+        bedTimesLocalSec: [Int], wakeTimesLocalSec: [Int],
+        store: WhoopStore, computedId: String
+    ) async {
+        let satKey = IntelligenceEngine.saturdayKey(onOrBefore: weekAnchorDay)
+
+        // ── Fitness Age (Phase 2) + VO2max ──────────────────────────────────────────────────────────
+        let faRHRs = weekRows.compactMap { $0.restingHr }.map(Double.init)
+        let faActiveStrains = weekRows.compactMap { $0.strain }.filter { $0 >= 30 }
+        let faMeanActiveStrain = faActiveStrains.isEmpty ? 0
+            : faActiveStrains.reduce(0, +) / Double(faActiveStrains.count)
+        let faWaist: Double? = profile.waistCm > 0 ? profile.waistCm : nil
+        let faReady = FitnessAgeEngine.assessReadiness(
+            hasAge: profile.age > 0, hasSex: !profile.sex.isEmpty,
+            rhrDays: faRHRs.count, activityDays: weekRows.compactMap { $0.strain }.count,
+            hasHeightWeight: profile.heightCm > 0 && profile.weightKg > 0, hasWaist: faWaist != nil)
+        if faReady.canCompute,
+           let faRes = FitnessAgeEngine.compute(
+                age: Double(profile.age), sex: profile.sex,
+                restingHR: IntelligenceEngine.medianOf(faRHRs),
+                paIndex: FitnessAgeEngine.physicalActivityIndexFromStrain(
+                    activeDaysPerWeek: faActiveStrains.count, meanActiveStrain: faMeanActiveStrain),
+                waistCm: faWaist) {
+            var faPts = [MetricPoint(day: satKey, key: "fitness_age", value: faRes.fitnessAge)]
+            if let v = faRes.vo2max { faPts.append(MetricPoint(day: satKey, key: "vo2max_est", value: v)) }
+            _ = try? await store.upsertMetricSeries(faPts, deviceId: computedId)
+        }
+
+        // ── Vitality / Body Age (Phase 7) + sleep regularity ────────────────────────────────────────
+        let vNights = weekRows.compactMap { $0.totalSleepMin }.map { Double($0) / 60.0 }.filter { $0 > 0 }
+        let vHRVs = weekRows.compactMap { $0.avgHrv }
+        let vSteps = weekRows.compactMap { $0.steps }.map(Double.init)
+        let vSleepConsistency = VitalityEngine.bedWakeRegularity(bedTimesLocalSec: bedTimesLocalSec,
+                                                                 wakeTimesLocalSec: wakeTimesLocalSec)
+            ?? VitalityEngine.sleepConsistency(nightlyHours: vNights)
+        if let reg = vSleepConsistency {
+            _ = try? await store.upsertMetricSeries([
+                MetricPoint(day: satKey, key: "sleep_regularity", value: reg * 100)
+            ], deviceId: computedId)
+        }
+        let vInputs = VitalityEngine.Inputs(
+            chronoAge: Double(profile.age),
+            restingHR: faRHRs.isEmpty ? nil : IntelligenceEngine.medianOf(faRHRs),
+            sleepHours: vNights.isEmpty ? nil : vNights.reduce(0, +) / Double(vNights.count),
+            sleepConsistency: vSleepConsistency,
+            rmssd: vHRVs.isEmpty ? nil : IntelligenceEngine.medianOf(vHRVs),
+            rmssdNorm: VitalityEngine.rmssdNorm(forAge: Double(profile.age)),
+            steps: vSteps.isEmpty ? nil : vSteps.reduce(0, +) / Double(vSteps.count))
+        if let vRes = VitalityEngine.compute(vInputs) {
+            _ = try? await store.upsertMetricSeries([
+                MetricPoint(day: satKey, key: "vitality", value: vRes.vitality),
+                MetricPoint(day: satKey, key: "body_age", value: vRes.bodyAge),
+            ], deviceId: computedId)
+        }
     }
 
     /// Compute on-device scores for each of the last `maxDays` that actually has raw HR data.
@@ -983,54 +1061,23 @@ final class IntelligenceEngine: ObservableObject {
             faVitalityPool.append(row)
         }
 
-        // ── Fitness Age (Phase 2) , weekly, keyed to the week's Saturday ────────────────────────────
+        // ── Fitness Age / Vitality (Phase 2 / 7) , THIS week, keyed to the week's Saturday ────────────
         // Roll the last 7 days (computed + folded-in WHOOP-import, see faVitalityPool above) into the
-        // Nes/HUNT inputs and upsert a weekly Fitness Age (+ an optional VO₂max when a waist is set) under
-        // the same "-noop" source. Idempotent on the Saturday key, so the number refines through the week
-        // and finalises on Saturday. Engine = FitnessAgeEngine (StrandAnalytics), fully unit-tested; the
-        // body term cancels so the headline needs no body metric.
+        // Nes/HUNT + mortality-hazard inputs and upsert this week's Fitness Age / VO2max / sleep
+        // regularity / Vitality / Body Age. Shares `computeAndPersistWeeklyFitnessVitality` with the
+        // full-history backfill below, so "this week" and "every past week" always compute identically.
         let fa7 = faVitalityPool.sorted { $0.day < $1.day }.suffix(7)
         // The Saturday the computed point is KEYED to: the actual week `fa7`'s data falls in, not
         // necessarily this week , so a fold from an old import reads as "the week of <that data>" in
         // Trends/history, never implied to be a fresh, current-week computation it isn't.
         let faVitalityWeekAnchor = fa7.last?.day ?? newestDay
-        let faRHRs = fa7.compactMap { $0.restingHr }.map(Double.init)
-        let faActiveStrains = fa7.compactMap { $0.strain }.filter { $0 >= 30 }
-        let faMeanActiveStrain = faActiveStrains.isEmpty ? 0
-            : faActiveStrains.reduce(0, +) / Double(faActiveStrains.count)
-        let faWaist: Double? = profile.waistCm > 0 ? profile.waistCm : nil
-        let faReady = FitnessAgeEngine.assessReadiness(
-            hasAge: profile.age > 0, hasSex: !profile.sex.isEmpty,
-            rhrDays: faRHRs.count, activityDays: fa7.compactMap { $0.strain }.count,
-            hasHeightWeight: profile.heightCm > 0 && profile.weightKg > 0, hasWaist: faWaist != nil)
-        if faReady.canCompute,
-           let faRes = FitnessAgeEngine.compute(
-                age: Double(profile.age), sex: profile.sex,
-                restingHR: IntelligenceEngine.medianOf(faRHRs),
-                paIndex: FitnessAgeEngine.physicalActivityIndexFromStrain(
-                    activeDaysPerWeek: faActiveStrains.count, meanActiveStrain: faMeanActiveStrain),
-                waistCm: faWaist) {
-            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
-            var faPts = [MetricPoint(day: satKey, key: "fitness_age", value: faRes.fitnessAge)]
-            if let v = faRes.vo2max { faPts.append(MetricPoint(day: satKey, key: "vo2max_est", value: v)) }
-            _ = try? await store.upsertMetricSeries(faPts, deviceId: computedId)
-        }
-
-        // ── Vitality / Body Age (Phase 7) , weekly, keyed to the week's Saturday ────────────────────
-        // Roll the last 7 days' wearable signals into the mortality-hazard model and upsert a weekly
-        // Vitality (0–100) + Body Age. VitalityEngine gates on ≥3 inputs, so a sparse week writes nothing.
-        // (VO₂max is omitted here , fitness is already its own Fitness Age headline; Vitality leans on
-        // resting HR, sleep duration + regularity, HRV-vs-age-norm, and steps.)
-        let vNights = fa7.compactMap { $0.totalSleepMin }.map { Double($0) / 60.0 }.filter { $0 > 0 }
-        let vHRVs = fa7.compactMap { $0.avgHrv }
-        let vSteps = fa7.compactMap { $0.steps }.map(Double.init)
         // ── True bed/wake-TIME regularity (not just duration) ──────────────────────────────────────────
         // For each day in the SAME fa7 window, pick the night's longest sleep session (mirrors the
         // "sleep is filed under the wake day" convention used everywhere else) and convert its start/end
         // to local clock-time-of-day, so `bedWakeRegularity` can score how STEADY the actual bed/wake
         // clock times are — the same idea WHOOP's own Sleep Consistency and Oura's Sleep Regularity Index
-        // are built on, and a real upgrade over the old duration-only coefficient-of-variation proxy
-        // (two nights of identical LENGTH at wildly different clock times used to read as "regular").
+        // are built on. Only available for the CURRENT week (needs `scoredNights`, which is pass-scoped);
+        // the historical backfill passes empty arrays and falls back to the duration-only proxy.
         let fa7Days = Set(fa7.map { $0.day })
         var mainSessionByDay: [String: CachedSleepSession] = [:]
         for night in scoredNights {
@@ -1048,31 +1095,34 @@ final class IntelligenceEngine: ObservableObject {
         func localTimeOfDaySeconds(_ ts: Int) -> Int { ((ts + tzOffset) % 86_400 + 86_400) % 86_400 }
         let bedTimesLocalSec = mainSessionByDay.values.map { localTimeOfDaySeconds($0.startTs) }
         let wakeTimesLocalSec = mainSessionByDay.values.map { localTimeOfDaySeconds($0.endTs) }
-        // Real timing-based regularity when there's enough of it; otherwise fall back to the old
-        // duration-only proxy rather than dropping the input (a sparse week still gets a rough signal).
-        let vSleepConsistency = VitalityEngine.bedWakeRegularity(bedTimesLocalSec: bedTimesLocalSec,
-                                                                 wakeTimesLocalSec: wakeTimesLocalSec)
-            ?? VitalityEngine.sleepConsistency(nightlyHours: vNights)
-        if let reg = vSleepConsistency {
-            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
-            _ = try? await store.upsertMetricSeries([
-                MetricPoint(day: satKey, key: "sleep_regularity", value: reg * 100)
-            ], deviceId: computedId)
-        }
-        let vInputs = VitalityEngine.Inputs(
-            chronoAge: Double(profile.age),
-            restingHR: faRHRs.isEmpty ? nil : IntelligenceEngine.medianOf(faRHRs),
-            sleepHours: vNights.isEmpty ? nil : vNights.reduce(0, +) / Double(vNights.count),
-            sleepConsistency: vSleepConsistency,
-            rmssd: vHRVs.isEmpty ? nil : IntelligenceEngine.medianOf(vHRVs),
-            rmssdNorm: VitalityEngine.rmssdNorm(forAge: Double(profile.age)),
-            steps: vSteps.isEmpty ? nil : vSteps.reduce(0, +) / Double(vSteps.count))
-        if let vRes = VitalityEngine.compute(vInputs) {
-            let satKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
-            _ = try? await store.upsertMetricSeries([
-                MetricPoint(day: satKey, key: "vitality", value: vRes.vitality),
-                MetricPoint(day: satKey, key: "body_age", value: vRes.bodyAge),
-            ], deviceId: computedId)
+        await computeAndPersistWeeklyFitnessVitality(
+            weekRows: fa7, weekAnchorDay: faVitalityWeekAnchor,
+            bedTimesLocalSec: bedTimesLocalSec, wakeTimesLocalSec: wakeTimesLocalSec,
+            store: store, computedId: computedId)
+
+        // ── Full-history backfill (one-shot) ──────────────────────────────────────────────────────────
+        // Beyond "this week", also compute a REAL trend across the user's whole imported history (not a
+        // single blended lifetime average -- see the design discussion this responds to: averaging 14
+        // months into one number would mix "you a year ago" with "you now" into a meaningless figure).
+        // Walks `hist` (the full WHOOP-import read, already loaded above) in consecutive 7-day chunks and
+        // runs the SAME per-week computation for each, so Trends/Metric Explorer show a genuine week-by-
+        // week Fitness Age / VO2max / Vitality / Body Age / sleep-regularity history, not just today's
+        // snapshot. One-shot (a flag, not a per-pass recompute): a multi-hundred-week import is still
+        // cheap (each chunk is ~7 already-in-memory rows, no extra disk reads), but there is no reason to
+        // redo it every 15-minute pass once it has run.
+        if !UserDefaults.standard.bool(forKey: Self.fitnessVitalityBackfillFlagKey), !hist.isEmpty {
+            var i = 0
+            while i < hist.count {
+                let chunk = hist[i..<min(i + 7, hist.count)]
+                if let anchor = chunk.last?.day {
+                    await computeAndPersistWeeklyFitnessVitality(
+                        weekRows: chunk, weekAnchorDay: anchor,
+                        bedTimesLocalSec: [], wakeTimesLocalSec: [],
+                        store: store, computedId: computedId)
+                }
+                i += 7
+            }
+            UserDefaults.standard.set(true, forKey: Self.fitnessVitalityBackfillFlagKey)
         }
 
         // ── Steps ESTIMATE (WHOOP 4.0) , DAILY, keyed to each strap-only day ────────────────────────
