@@ -83,15 +83,26 @@ public enum LabResultDocumentImport {
         /// didn't resolve to a known marker — reported so the user knows the scan wasn't
         /// silently perfect, never counted as an error.
         public var unrecognizedLineCount: Int
+        /// The FIRST `unrecognizedSampleCap` of those lines, verbatim — so the review screen can
+        /// show exactly what didn't match instead of just a count, letting the user (or a future
+        /// catalog/alias update) see precisely which report lines to add coverage for.
+        public var unrecognizedSamples: [String]
         /// True when the input text was cut by `maxChars`/`maxLines` (an absurdly large
         /// document) — the tail was not read.
         public var truncated: Bool
 
-        public init(rows: [DetectedRow], detectedDay: String?, unrecognizedLineCount: Int, truncated: Bool) {
+        public init(rows: [DetectedRow], detectedDay: String?, unrecognizedLineCount: Int,
+                    unrecognizedSamples: [String] = [], truncated: Bool) {
             self.rows = rows; self.detectedDay = detectedDay
-            self.unrecognizedLineCount = unrecognizedLineCount; self.truncated = truncated
+            self.unrecognizedLineCount = unrecognizedLineCount
+            self.unrecognizedSamples = unrecognizedSamples
+            self.truncated = truncated
         }
     }
+
+    /// Cap on how many verbatim unrecognized lines `Result.unrecognizedSamples` keeps — enough to
+    /// diagnose a real gap without holding a large chunk of the document in memory.
+    public static let unrecognizedSampleCap = 40
 
     /// Parse plain text already extracted from a document (PDF text layer or OCR).
     public static func parse(text: String) -> Result {
@@ -103,6 +114,7 @@ public enum LabResultDocumentImport {
 
         var found: [DetectedRow] = []
         var unrecognized = 0
+        var samples: [String] = []
         for raw in lines {
             let line = raw.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
@@ -111,7 +123,10 @@ public enum LabResultDocumentImport {
             case .none:
                 // Only count lines that at least LOOK like a result row (name + a number)
                 // as "unrecognized" — plain prose/headers are just not results at all.
-                if looksLikeResultRow(line) { unrecognized += 1 }
+                if looksLikeResultRow(line) {
+                    unrecognized += 1
+                    if samples.count < unrecognizedSampleCap { samples.append(line) }
+                }
             }
         }
 
@@ -124,7 +139,7 @@ public enum LabResultDocumentImport {
         let deduped = order.compactMap { byKey[$0] }
 
         return Result(rows: deduped, detectedDay: detectReportDay(in: capped),
-                      unrecognizedLineCount: unrecognized, truncated: truncated)
+                      unrecognizedLineCount: unrecognized, unrecognizedSamples: samples, truncated: truncated)
     }
 
     // MARK: - Per-line parsing

@@ -164,4 +164,47 @@ public enum PhenoAgeEngine {
         if r.value > 500 { return r.value / 1000 }
         return r.value
     }
+
+    // MARK: - Diagnosis (why `compute` returned nil, precisely — not a guess)
+
+    /// One input, after the SAME unit-normalization `compute` applies, checked against a broad
+    /// PHYSIOLOGICAL-PLAUSIBILITY envelope (not a clinical/optimal range — just "a living person
+    /// cannot have this value"). Flags a value at least 3× outside that envelope, which is the
+    /// signature of a scan error (a dropped decimal point, a doubled digit, a swapped unit) rather
+    /// than a genuinely extreme-but-real result.
+    public struct Flag: Sendable, Equatable {
+        /// The MarkerCatalog key ("crp", "mcv", …) — NOT a display string, so the caller can look
+        /// the display name up from a single source of truth (MarkerCatalog) instead of two files
+        /// having to agree on hand-typed label text that can silently drift apart.
+        public let key: String
+        public let normalizedValue: Double
+        public let unit: String
+        /// The broad plausibility envelope this value fell outside of.
+        public let plausibleRange: ClosedRange<Double>
+    }
+
+    /// Runs every input through the same normalization `compute` uses and flags any that lands
+    /// outside a generous physiological envelope — wide enough to include real extreme results,
+    /// narrow enough to catch a scan misread. Returns every implausible marker, in the fixed
+    /// formula order, so the caller can name the exact one(s) to check rather than listing all nine.
+    /// Keys match the ones `HealthView.PhenoAgeSection.requiredKeys` reads from the Lab Book.
+    public static func diagnose(_ i: Inputs) -> [Flag] {
+        var flags: [Flag] = []
+        func check(_ key: String, _ v: Double?, unit: String, _ range: ClosedRange<Double>) {
+            guard let v, v.isFinite else { return }
+            if !range.contains(v) {
+                flags.append(Flag(key: key, normalizedValue: v, unit: unit, plausibleRange: range))
+            }
+        }
+        check("albumin", normalizeAlbumin(i.albumin), unit: "g/L", 10...70)
+        check("creatinine", normalizeCreatinine(i.creatinine), unit: "µmol/L", 15...2000)
+        check("fasting_glucose", normalizeGlucose(i.glucose), unit: "mmol/L", 1...45)
+        check("crp", normalizeCRP(i.crp), unit: "mg/L", 0...500)
+        check("lymphocyte_pct", plain(i.lymphocytePct), unit: "%", 0...100)
+        check("mcv", plain(i.mcv), unit: "fL", 40...150)
+        check("rdw", plain(i.rdw), unit: "%", 8...30)
+        check("alkaline_phosphatase", plain(i.alkalinePhosphatase), unit: "U/L", 5...2000)
+        check("wbc_count", normalizeWBC(i.wbc), unit: "10^9/L", 0.3...100)
+        return flags
+    }
 }

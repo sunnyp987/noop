@@ -43,6 +43,9 @@ struct LabDocumentReviewView: View {
                 } else {
                     rowsCard
                 }
+                if !result.unrecognizedSamples.isEmpty {
+                    unrecognizedCard
+                }
                 saveButton
             }
         }
@@ -174,6 +177,36 @@ struct LabDocumentReviewView: View {
             return "\(LabBookFormat.value(v, key: key)) \(row.unit)"
         case .bloodPressure(let sys, let dia):
             return "\(Int(sys.rounded()))/\(Int(dia.rounded())) \(row.unit)"
+        }
+    }
+
+    // MARK: - Unrecognized lines (what to check / report if coverage should expand)
+
+    /// Shows the actual text of lines that looked like results but didn't match a known marker —
+    /// verbatim, not a guess at what they might be. Lets you see exactly what a report calls
+    /// something Baseline doesn't recognise yet, instead of just a count.
+    private var unrecognizedCard: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("Not recognised", overline: "as printed, unchanged")
+            NoopCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("These lines looked like a result row but didn't match a marker Baseline knows. Nothing was guessed or dropped silently — they're just not saved unless you add them by hand.")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(Array(result.unrecognizedSamples.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(StrandFont.footnote.monospaced())
+                            .foregroundStyle(StrandPalette.textTertiary)
+                            .lineLimit(1)
+                    }
+                    if result.unrecognizedLineCount > result.unrecognizedSamples.count {
+                        Text("+ \(result.unrecognizedLineCount - result.unrecognizedSamples.count) more")
+                            .font(StrandFont.footnote)
+                            .foregroundStyle(StrandPalette.textTertiary)
+                    }
+                }
+            }
         }
     }
 

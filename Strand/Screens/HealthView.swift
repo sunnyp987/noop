@@ -1410,7 +1410,9 @@ private struct PhenoAgeSection: View {
         "mcv", "rdw", "alkaline_phosphatase", "wbc_count",
     ]
 
-    private var result: PhenoAgeEngine.Result? {
+    /// Built once and shared by `result` and `diagnosisFlags` so the two never disagree about
+    /// what the nine inputs actually were.
+    private var inputs: PhenoAgeEngine.Inputs? {
         func reading(_ key: String) -> PhenoAgeEngine.Reading? {
             guard let row = latest[key], let v = row.value else { return nil }
             return PhenoAgeEngine.Reading(value: v, unit: row.unit)
@@ -1421,9 +1423,23 @@ private struct PhenoAgeSection: View {
               let rdw = reading("rdw"), let alp = reading("alkaline_phosphatase"),
               let wbc = reading("wbc_count"), profile.age > 0
         else { return nil }
-        return PhenoAgeEngine.compute(.init(
-            chronoAge: Double(profile.age), albumin: albumin, creatinine: creatinine, glucose: glucose,
-            crp: crp, lymphocytePct: lymph, mcv: mcv, rdw: rdw, alkalinePhosphatase: alp, wbc: wbc))
+        return .init(chronoAge: Double(profile.age), albumin: albumin, creatinine: creatinine,
+                     glucose: glucose, crp: crp, lymphocytePct: lymph, mcv: mcv, rdw: rdw,
+                     alkalinePhosphatase: alp, wbc: wbc)
+    }
+
+    private var result: PhenoAgeEngine.Result? {
+        guard let inputs else { return nil }
+        return PhenoAgeEngine.compute(inputs)
+    }
+
+    /// Exactly which of the nine inputs looks physiologically implausible (a scan-error signature,
+    /// not a clinical judgement) when `result` is nil despite having all nine markers. Empty when
+    /// nothing is flagged (compute() can still fail on a plausible-but-extreme combination via its
+    /// own Gompertz-range guard — rare, but the fallback message covers it).
+    private var diagnosisFlags: [PhenoAgeEngine.Flag] {
+        guard let inputs else { return [] }
+        return PhenoAgeEngine.diagnose(inputs)
     }
 
     private var missingLabels: [String] {
@@ -1442,7 +1458,9 @@ private struct PhenoAgeSection: View {
                            ? "Needs the rest of a full blood panel: \(missingLabels.joined(separator: ", ")). Add them in Lab Book."
                            : profile.age <= 0
                            ? "Add your age in Settings and we can show your PhenoAge."
-                           : "One of your values looks out of range for this formula \u{2014} double-check your Lab Book entries against the report for a mis-scanned number or unit."),
+                           : !diagnosisFlags.isEmpty
+                           ? "\(diagnosisFlags.map { "\(MarkerCatalog.definition(for: $0.key)?.displayName ?? $0.key) (\(String(format: "%.2f", $0.normalizedValue)) \($0.unit))" }.joined(separator: ", ")) looks implausible \u{2014} check that entry in Lab Book against your report for a mis-scanned number or unit."
+                           : "One of your values combines into a result outside this formula's valid range \u{2014} double-check every entry in Lab Book against the report."),
                            symbol: "cross.vial")
                 if loaded, result == nil, missingLabels.isEmpty, profile.age > 0 {
                     outOfRangeDiagnostics
@@ -1455,18 +1473,26 @@ private struct PhenoAgeSection: View {
     }
 
     /// Shown only when all nine markers are present but the formula still rejected them — lists the raw
-    /// stored value/unit for each so the user can spot the one a document scan misread (a stray digit or
-    /// a swapped unit) without having to dig through the Lab Book row by row.
+    /// stored value/unit for each, with any marker `diagnosisFlags` names highlighted in red, so the
+    /// culprit is visually obvious rather than something to hunt for across nine rows.
     private var outOfRangeDiagnostics: some View {
-        VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+        let flaggedKeys = Set(diagnosisFlags.map(\.key))
+        return VStack(alignment: .leading, spacing: NoopMetrics.space2) {
             ForEach(Self.requiredKeys, id: \.self) { key in
                 if let row = latest[key], let v = row.value {
+                    let label = MarkerCatalog.definition(for: key)?.displayName ?? key
+                    let flagged = flaggedKeys.contains(key)
                     HStack {
-                        Text(MarkerCatalog.definition(for: key)?.displayName ?? key)
-                            .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
+                        Text(label)
+                            .font(StrandFont.footnote).foregroundStyle(flagged ? StrandPalette.statusCritical : StrandPalette.textSecondary)
+                        if flagged {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10)).foregroundStyle(StrandPalette.statusCritical)
+                        }
                         Spacer()
                         Text("\(v.formatted()) \(row.unit ?? "")")
-                            .font(StrandFont.footnote.weight(.medium)).foregroundStyle(StrandPalette.textPrimary)
+                            .font(StrandFont.footnote.weight(.medium))
+                            .foregroundStyle(flagged ? StrandPalette.statusCritical : StrandPalette.textPrimary)
                     }
                 }
             }
