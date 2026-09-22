@@ -72,6 +72,9 @@ private struct HealthSectionsStack: View {
             // Vitality / Body Age (weekly, computed by IntelligenceEngine from the mortality-
             // hazard model). Its own view depending only on repo/profile.
             VitalitySection()
+            // A visible seam: everything above this line uses a rolling 7-day window, everything below
+            // (Lifetime Averages) uses your entire imported history — same formula, different window.
+            WeeklyToLifetimeDivider()
             // Lifetime Fitness Age / Vitality: the SAME engines run over your ENTIRE imported history in
             // one pass, instead of the rolling 7-day window the sections above use. A separate, clearly
             // labeled category (never blended into the weekly headline) so "what does using ALL my data
@@ -720,7 +723,7 @@ private struct FitnessAgeSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Fitness Age", overline: "Weekly",
+            SectionHeader("Fitness Age", overline: "This week",
                           trailing: fitnessAge != nil ? weekOfTrailing(vsAge: profile.age) : nil)
             content
         }
@@ -1054,7 +1057,7 @@ private struct VitalitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Vitality", overline: "Weekly", trailing: vitalityTrailing())
+            SectionHeader("Vitality", overline: "This week", trailing: vitalityTrailing())
             if let v = vitality, let ba = bodyAge {
                 hero(vitality: v, bodyAge: ba)
             } else if loaded {
@@ -1278,6 +1281,26 @@ private struct BaselineAgeSection: View {
     }
 }
 
+// MARK: - Weekly / All-time divider
+
+/// A plain-language seam between the two Fitness Age / Vitality readings so the split isn't only carried
+/// by each card's small overline text. Both use the EXACT SAME StrandAnalytics formulas
+/// (FitnessAgeEngine/VitalityEngine) — the only difference is the time window they're computed over:
+/// the cards above use a rolling 7-day window, the cards below use your entire imported history in one
+/// pass. Placed once, right where the window changes, so it's obvious without reading every card.
+private struct WeeklyToLifetimeDivider: View {
+    var body: some View {
+        HStack(spacing: NoopMetrics.space3) {
+            Rectangle().fill(StrandPalette.hairline).frame(height: 1)
+            Text("SAME FORMULA · FULL HISTORY BELOW")
+                .font(StrandFont.caption)
+                .foregroundStyle(StrandPalette.textTertiary)
+                .fixedSize()
+            Rectangle().fill(StrandPalette.hairline).frame(height: 1)
+        }
+    }
+}
+
 // MARK: - Lifetime snapshot (full-history Fitness Age / Vitality, a separate category)
 
 /// A SEPARATE category from the weekly Fitness Age/Vitality above: the same StrandAnalytics engines
@@ -1296,7 +1319,7 @@ private struct LifetimeSnapshotSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Lifetime Averages", overline: "All-time",
+            SectionHeader("Lifetime Averages", overline: "Full history",
                           trailing: fitnessAge != nil ? String(localized: "vs age \(profile.age)") : nil)
             if fitnessAge != nil || vitality != nil {
                 card
