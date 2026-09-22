@@ -27,6 +27,14 @@ import WhoopStore
 // statement; any reference range shown is EXACTLY what the user typed from their own
 // report; correlation copy says "association, not a medical finding". The full
 // disclaimer shows on the screen and (Wave 3) links to the consolidated About & Legal.
+//
+// SCOPED EXCEPTION — the "Calculated" section (DerivedLabRatios): a small, explicit,
+// user-requested exception to the above. It shows well-established textbook ratios
+// (NLR, AST/ALT, Triglyceride/HDL, …) computed on-device from the user's own saved
+// readings, alongside real explanatory text ("what a high/low reading commonly means")
+// in a patient-handout register. See DerivedLabRatios.swift's header for the full
+// rationale and the boundary of this exception — it does NOT extend to any other
+// marker, import path, or screen in Lab Book.
 
 struct LabBookView: View {
     @EnvironmentObject var repo: Repository
@@ -38,6 +46,8 @@ struct LabBookView: View {
 
     /// The marker whose detail sheet is open (nil = none).
     @State private var detailKey: String?
+    /// The calculated-ratio marker key whose explanation sheet is open (nil = none).
+    @State private var calcDetailKey: String?
     /// Whether the add/edit editor sheet is open.
     @State private var showingEditor = false
     /// Whether the first-use disclaimer sheet is open.
@@ -78,6 +88,7 @@ struct LabBookView: View {
                 } else if markers.isEmpty {
                     emptyState
                 } else {
+                    if !calculatedRatios.isEmpty { calculatedSection }
                     ForEach(orderedCategories, id: \.self) { category in
                         categorySection(category)
                     }
@@ -98,6 +109,9 @@ struct LabBookView: View {
         }
         .sheet(isPresented: $showingDisclaimer) {
             LabBookDisclaimerView()
+        }
+        .sheet(item: calcDetailBinding) { key in
+            CalculatedRatioDetailView(result: calculatedRatios.first { $0.key == key.id })
         }
         .sheet(item: docReviewBinding) { wrapper in
             LabDocumentReviewView(result: wrapper.result, deviceId: repo.deviceId) { rows in
@@ -424,6 +438,68 @@ struct LabBookView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    // MARK: - Calculated ratios (DerivedLabRatios — see that file's header for the scope of
+    // this documented exception to Lab Book's usual non-clinical framing)
+
+    /// The latest numeric reading per marker key, fed into `DerivedLabRatios.compute`.
+    private var latestByKey: [String: DerivedLabRatios.Input] {
+        var out: [String: DerivedLabRatios.Input] = [:]
+        for row in markers {
+            guard let value = row.value else { continue }
+            let candidate = DerivedLabRatios.Input(value: value, unit: row.unit, day: row.day)
+            if let existing = out[row.markerKey], existing.day > candidate.day { continue }
+            out[row.markerKey] = candidate
+        }
+        return out
+    }
+
+    private var calculatedRatios: [DerivedLabRatios.Result] {
+        DerivedLabRatios.compute(from: latestByKey)
+    }
+
+    private var calculatedSection: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("Calculated", overline: calculatedRatios.count == 1 ? "1 ratio from your readings" : "\(calculatedRatios.count) ratios from your readings")
+            ForEach(calculatedRatios, id: \.key) { result in
+                Button {
+                    calcDetailKey = result.key
+                } label: {
+                    NoopCard {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(displayName(for: result.key))
+                                    .font(StrandFont.headline)
+                                    .foregroundStyle(StrandPalette.textPrimary)
+                                    .lineLimit(1)
+                                Text("from your own readings")
+                                    .font(StrandFont.footnote)
+                                    .foregroundStyle(StrandPalette.textTertiary)
+                            }
+                            Spacer(minLength: 8)
+                            Text("\(LabBookFormat.value(result.value, key: result.key)) \(result.unit == "ratio" ? "" : result.unit)")
+                                .font(StrandFont.number(18))
+                                .foregroundStyle(StrandPalette.textPrimary)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(StrandPalette.textTertiary)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+                .buttonStyle(LiquidPressStyle())
+                .accessibilityLabel("\(displayName(for: result.key)), \(LabBookFormat.value(result.value, key: result.key)) \(result.unit), calculated from your own readings")
+            }
+        }
+    }
+
+    private var calcDetailBinding: Binding<MarkerKeyID?> {
+        Binding(
+            get: { calcDetailKey.map(MarkerKeyID.init) },
+            set: { calcDetailKey = $0?.id }
+        )
     }
 
     // MARK: - Category sections
@@ -1167,6 +1243,71 @@ enum LabBookSignals {
     static func correlationColor(_ r: Double) -> Color {
         let base = r >= 0 ? StrandPalette.statusPositive : StrandPalette.statusCritical
         return base.opacity(0.55 + 0.45 * min(abs(r), 1.0))
+    }
+}
+
+// MARK: - Calculated-ratio explanation sheet (DerivedLabRatios — see that file's header)
+
+private struct CalculatedRatioDetailView: View {
+    let result: DerivedLabRatios.Result?
+    @Environment(\.dismiss) private var dismiss
+
+    private var displayName: String {
+        result.map { MarkerCatalog.definition(for: $0.key)?.displayName ?? LabBookView.humanise($0.key) } ?? ""
+    }
+    private var explanation: DerivedLabRatios.Explanation? {
+        result.flatMap { DerivedLabRatios.explanations[$0.key] }
+    }
+
+    var body: some View {
+        ScreenScaffold(title: LocalizedStringKey(displayName), subtitle: "Calculated from your own readings") {
+            VStack(alignment: .leading, spacing: NoopMetrics.sectionGap) {
+                if let result {
+                    NoopCard(tint: StrandPalette.metricCyan) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("\(LabBookFormat.value(result.value, key: result.key)) \(result.unit == "ratio" ? "" : result.unit)")
+                                .font(StrandFont.number(28))
+                                .foregroundStyle(StrandPalette.textPrimary)
+                            Text("as of \(LabBookFormat.dayFromKey(result.day)) · computed from " + result.inputsUsed.map { LabBookView.humanise($0) }.joined(separator: " and "))
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                if let explanation {
+                    explanationBlock("What it measures", explanation.whatItMeasures)
+                    explanationBlock("Why it's checked", explanation.whyItMatters)
+                    explanationBlock("What a high reading commonly means", explanation.highMeans)
+                    explanationBlock("What a low reading commonly means", explanation.lowMeans)
+                }
+                Text("This describes what clinicians commonly check this ratio for — it isn't a diagnosis, and Baseline isn't making one. Always talk to your doctor or pharmacist about what your own numbers mean.")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Got it") { dismiss() }
+                    .buttonStyle(.noopPrimary)
+                    .padding(.top, 4)
+            }
+        }
+        #if os(iOS)
+        .presentationDragIndicator(.visible)
+        #else
+        .frame(width: 520, height: 680)
+        #endif
+        .background(StrandPalette.surfaceBase)
+    }
+
+    private func explanationBlock(_ title: LocalizedStringKey, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(StrandFont.headline)
+                .foregroundStyle(StrandPalette.textPrimary)
+            Text(body)
+                .font(StrandFont.subhead)
+                .foregroundStyle(StrandPalette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

@@ -234,6 +234,9 @@ public enum MarkerCatalog {
         .init(key: "castelli_risk_index_1", displayName: "Castelli risk index I", category: .bloodPanel, canonicalUnit: "ratio", decimals: 2, referenceTextHint: fromReport),
         .init(key: "castelli_risk_index_2", displayName: "Castelli risk index II", category: .bloodPanel, canonicalUnit: "ratio", decimals: 2, referenceTextHint: fromReport),
         .init(key: "atherogenic_index_plasma", displayName: "Atherogenic index of plasma (AIP)", category: .bloodPanel, canonicalUnit: "score", decimals: 2, referenceTextHint: fromReport),
+        .init(key: "ast_alt_ratio", displayName: "AST/ALT ratio (De Ritis ratio)", category: .bloodPanel, canonicalUnit: "ratio", decimals: 2, referenceTextHint: fromReport),
+        .init(key: "bilirubin_albumin_ratio", displayName: "Bilirubin/albumin ratio", category: .bloodPanel, canonicalUnit: "ratio", decimals: 2, referenceTextHint: fromReport),
+        .init(key: "free_androgen_index", displayName: "Free androgen index (FAI)", category: .bloodPanel, canonicalUnit: "%", decimals: 1, referenceTextHint: fromReport),
         // Blood pressure (the paired marker — see LabBookProjection.bpSystolicKey/bpDiastolicKey)
         .init(key: "bp_systolic", displayName: "Blood pressure (systolic)", category: .bloodPressure, canonicalUnit: "mmHg", decimals: 0, referenceTextHint: fromReport),
         .init(key: "bp_diastolic", displayName: "Blood pressure (diastolic)", category: .bloodPressure, canonicalUnit: "mmHg", decimals: 0, referenceTextHint: fromReport),
@@ -313,7 +316,7 @@ public enum MarkerCatalog {
         tag("Kidney", ["egfr", "creatinine", "bun", "bun_creatinine_ratio", "cystatin_c", "cystatin_c_egfr"])
         tag("Liver & protein", [
             "alt", "ast", "ggt", "total_bilirubin", "direct_bilirubin", "indirect_bilirubin", "total_protein",
-            "globulin", "ag_ratio", "alkaline_phosphatase", "albumin",
+            "globulin", "ag_ratio", "alkaline_phosphatase", "albumin", "ast_alt_ratio", "bilirubin_albumin_ratio",
         ])
         tag("Electrolytes & minerals", [
             "sodium", "potassium", "calcium", "magnesium", "phosphorus", "chloride", "co2",
@@ -325,7 +328,7 @@ public enum MarkerCatalog {
         ])
         tag("Hormones", [
             "testosterone_total", "testosterone_free", "testosterone_bioavailable", "shbg", "estradiol", "progesterone",
-            "dhea_s", "cortisol", "lh", "fsh", "prolactin", "igf_1", "psa",
+            "dhea_s", "cortisol", "lh", "fsh", "prolactin", "igf_1", "psa", "free_androgen_index",
         ])
         tag("Vitamins", [
             "vitamin_d", "vitamin_b12", "folate", "vitamin_a", "vitamin_e", "vitamin_k",
