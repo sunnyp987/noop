@@ -64,7 +64,11 @@ struct RootTabView: View {
                 tab(todayTabRoot, "Today", "square.grid.2x2").tag(0)
                 tab(TrendsView(), "Trends", "chart.line.uptrend.xyaxis").tag(1)
                 tab(SleepView(), "Sleep", "bed.double").tag(2)
-                moreTab.tag(3)
+                // Health gets its own primary tab (not just a More-list row) so the newer age
+                // sections — Baseline Age, Lifetime Averages, PhenoAge — are one tap away instead
+                // of buried behind More > Body > Health.
+                tab(HealthView(), "Health", "heart.text.square").tag(3)
+                moreTab.tag(4)
             }
             .tint(StrandPalette.accent)
             .toolbar(.hidden, for: .tabBar)
@@ -80,7 +84,7 @@ struct RootTabView: View {
                         guard selectedTab != 0 else { return }
                         let dx = v.translation.width, dy = v.translation.height
                         guard abs(dx) > 60, abs(dx) > abs(dy) * 1.6 else { return }
-                        let next = min(3, max(0, selectedTab + (dx < 0 ? 1 : -1)))
+                        let next = min(4, max(0, selectedTab + (dx < 0 ? 1 : -1)))
                         if next != selectedTab {
                             withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) { selectedTab = next }
                         }
@@ -292,7 +296,8 @@ struct RootTabView: View {
                 moreSection("Body") {
                     MoreRow("Live", "waveform.path.ecg") { LiveView() }
                     MoreRow("Workouts", "figure.run") { WorkoutsView() }
-                    MoreRow("Health", "heart.text.square.fill") { HealthView() }
+                    // Health is now its own primary tab (see FloatingTabBar) — dropped from here so it
+                    // isn't listed twice.
                     MoreRow("Lab Book", "books.vertical.fill") { LabBookView() }
                     MoreRow("Stress", "bolt.heart.fill") { StressView() }
                     MoreRow("Breathe", "wind") { BreathingView() }
@@ -542,16 +547,14 @@ private struct FloatingTabBar: View {
     private let nav = [Item(title: "Today", icon: "square.grid.2x2", tag: 0),
                        Item(title: "Trends", icon: "chart.line.uptrend.xyaxis", tag: 1),
                        Item(title: "Sleep", icon: "bed.double", tag: 2),
-                       Item(title: "More", icon: "ellipsis", tag: 3)]
+                       Item(title: "Health", icon: "heart.text.square", tag: 3),
+                       Item(title: "More", icon: "ellipsis", tag: 4)]
 
     var body: some View {
-        // One frosted glass bar, four evenly-spaced tabs. The quick-action "+" now lives in the
+        // One frosted glass bar, five evenly-spaced tabs. The quick-action "+" now lives in the
         // top-right of each screen's header (balancing the profile avatar on the left).
         HStack(spacing: 2) {
-            tabButton(nav[0])
-            tabButton(nav[1])
-            tabButton(nav[2])
-            tabButton(nav[3])
+            ForEach(nav) { tabButton($0) }
         }
         .padding(.vertical, 7)
         .padding(.horizontal, 8)

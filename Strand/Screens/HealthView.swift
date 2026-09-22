@@ -66,6 +66,34 @@ private struct HealthSectionsStack: View {
             // so the ~1Hz HR stream re-renders only this subtree — the static
             // vitals grid below does not re-render on each HR tick.
             HeartRateSection()
+            // The three NEWEST age methodologies sit right after the HR hero — one screen's worth of
+            // scroll, not eight — since these are the sections people ask about and can't find. The
+            // weekly rolling-window family (the OLDER Fitness Age/Vitality cards) moves below them.
+            HealthGroupDivider("NEW · BASELINE AGE, FULL-HISTORY, AND PHENOAGE")
+            // Baseline Age: the original in-house multi-domain composite (cardio + HRV + sleep +
+            // training load + respiratory stability), transparently combined — Baseline's own answer to
+            // WHOOP's undisclosed Healthspan number, with every contributing domain visible.
+            BaselineAgeSection()
+            // A seam: Lifetime Averages is a DIFFERENT window on the SAME Nes/HUNT formula the weekly
+            // Fitness Age/Vitality cards below use — your entire imported history in one pass, not a
+            // rolling 7 days. This is the "full data age" (never blended with the weekly headline).
+            HealthGroupDivider("FULL HISTORY BELOW · SAME FORMULA AS THIS WEEK'S")
+            // Lifetime Fitness Age / Vitality: the SAME engines run over your ENTIRE imported history in
+            // one pass, instead of the rolling 7-day window the weekly cards below use. A separate,
+            // clearly labeled category so "what does using ALL my data say" is answerable without it
+            // silently overriding "what does THIS WEEK say".
+            LifetimeSnapshotSection()
+            // Another seam: PhenoAge is neither of the above — a THIRD, separately-published formula
+            // that runs on a lab blood panel instead of wearable signals at all.
+            HealthGroupDivider("FROM YOUR LAB PANEL · A PUBLISHED CLINICAL FORMULA")
+            // PhenoAge (StrandAnalytics.PhenoAgeEngine): Levine et al. 2018's clinical-chemistry
+            // biological-age formula, computed the moment a full CBC + metabolic panel + CRP lands in
+            // the Lab Book (e.g. from a Superpower-style panel or the new document scan). A published,
+            // externally-validated formula — never blended with Baseline Age's own composite above.
+            PhenoAgeSection()
+            // A fourth seam: everything below uses the OLDER rolling 7-day window (the original Fitness
+            // Age/Vitality cards) — kept for continuity, but no longer the first thing you see.
+            HealthGroupDivider("THIS WEEK BELOW · ROLLING 7-DAY WINDOW")
             // Fitness Age (weekly, computed by IntelligenceEngine and read back from the
             // "fitness_age" metricSeries). Its own view depending only on `repo`/`profile`,
             // so the live HR stream never re-renders it.
@@ -73,29 +101,6 @@ private struct HealthSectionsStack: View {
             // Vitality / Body Age (weekly, computed by IntelligenceEngine from the mortality-
             // hazard model). Its own view depending only on repo/profile.
             VitalitySection()
-            // A visible seam: everything above this line uses a rolling 7-day window, everything below
-            // (Lifetime Averages) uses your entire imported history — same formula, different window.
-            HealthGroupDivider("FULL HISTORY BELOW · SAME FORMULA")
-            // Lifetime Fitness Age / Vitality: the SAME engines run over your ENTIRE imported history in
-            // one pass, instead of the rolling 7-day window the sections above use. A separate, clearly
-            // labeled category (never blended into the weekly headline) so "what does using ALL my data
-            // say" is answerable without it silently overriding "what does THIS WEEK say".
-            LifetimeSnapshotSection()
-            // A second seam: Baseline Age is a DIFFERENT methodology again — Baseline's own multi-domain
-            // composite, not the Nes/HUNT formula the two families above use.
-            HealthGroupDivider("IN-HOUSE COMPOSITE BELOW · A DIFFERENT FORMULA")
-            // Baseline Age: the original in-house multi-domain composite (cardio + HRV + sleep +
-            // training load + respiratory stability), transparently combined — Baseline's own answer to
-            // WHOOP's undisclosed Healthspan number, with every contributing domain visible.
-            BaselineAgeSection()
-            // A third seam: PhenoAge is neither of the above — a THIRD, separately-published formula
-            // that runs on a lab blood panel instead of wearable signals at all.
-            HealthGroupDivider("FROM YOUR LAB PANEL BELOW · A PUBLISHED CLINICAL FORMULA")
-            // PhenoAge (StrandAnalytics.PhenoAgeEngine): Levine et al. 2018's clinical-chemistry
-            // biological-age formula, computed the moment a full CBC + metabolic panel + CRP lands in
-            // the Lab Book (e.g. from a Superpower-style panel or the new document scan). A published,
-            // externally-validated formula — never blended with Baseline Age's own composite above.
-            PhenoAgeSection()
             // Training Load Balance (weekly Acute:Chronic Workload Ratio, StrandAnalytics
             // TrainingLoadEngine). Shown here UNCONDITIONALLY (not gated behind the opt-in "Your
             // cards" customiser) so a genuinely new metric isn't buried behind a discovery step —
