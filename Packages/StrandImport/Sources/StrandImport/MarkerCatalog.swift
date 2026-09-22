@@ -99,7 +99,10 @@ public enum MarkerCatalog {
         .init(key: "crp", displayName: "C-reactive protein (CRP)", category: .bloodPanel, canonicalUnit: "mg/L", decimals: 1, referenceTextHint: fromReport),
         // Kidney
         .init(key: "egfr", displayName: "eGFR", category: .bloodPanel, canonicalUnit: "mL/min/1.73m²", decimals: 0, referenceTextHint: fromReport),
-        .init(key: "creatinine", displayName: "Creatinine", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 0, referenceTextHint: fromReport),
+        // decimals: 2 (not 0) even though the canonical SI unit (µmol/L) is usually whole —
+        // US reports print mg/dL, where the meaningful range is ~0.6-1.3 and rounding to 0
+        // decimals collapses every real reading down to "1".
+        .init(key: "creatinine", displayName: "Creatinine", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 2, referenceTextHint: fromReport),
         // Liver
         .init(key: "alt", displayName: "ALT", category: .bloodPanel, canonicalUnit: "U/L", decimals: 0, referenceTextHint: fromReport),
         .init(key: "ast", displayName: "AST", category: .bloodPanel, canonicalUnit: "U/L", decimals: 0, referenceTextHint: fromReport),
@@ -127,7 +130,9 @@ public enum MarkerCatalog {
         .init(key: "homa_ir", displayName: "HOMA-IR (insulin resistance)", category: .bloodPanel, canonicalUnit: "score", decimals: 2, referenceTextHint: fromReport),
         .init(key: "c_peptide", displayName: "C-peptide", category: .bloodPanel, canonicalUnit: "nmol/L", decimals: 2, referenceTextHint: fromReport),
         .init(key: "fructosamine", displayName: "Fructosamine", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 0, referenceTextHint: fromReport),
-        .init(key: "uric_acid", displayName: "Uric acid", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 0, referenceTextHint: fromReport),
+        // decimals: 1 (not 0) — same reasoning as creatinine: US reports print mg/dL
+        // (~3.5-8.0), where a real reading like "4.2" would otherwise round down to "4".
+        .init(key: "uric_acid", displayName: "Uric acid", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 1, referenceTextHint: fromReport),
         // Extended kidney
         .init(key: "bun", displayName: "Blood urea nitrogen (BUN)", category: .bloodPanel, canonicalUnit: "mmol/L", decimals: 1, referenceTextHint: fromReport),
         .init(key: "bun_creatinine_ratio", displayName: "BUN/creatinine ratio", category: .bloodPanel, canonicalUnit: "ratio", decimals: 1, referenceTextHint: fromReport),
