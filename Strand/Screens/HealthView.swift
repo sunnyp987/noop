@@ -72,6 +72,12 @@ private struct HealthSectionsStack: View {
             // Vitality / Body Age (weekly, computed by IntelligenceEngine from the mortality-
             // hazard model). Its own view depending only on repo/profile.
             VitalitySection()
+            // Training Load Balance (weekly Acute:Chronic Workload Ratio, StrandAnalytics
+            // TrainingLoadEngine). Shown here UNCONDITIONALLY (not gated behind the opt-in "Your
+            // cards" customiser) so a genuinely new metric isn't buried behind a discovery step —
+            // the same reasoning that put Fitness Age/Vitality here rather than only on the
+            // customisable dashboard. Its own view depending only on repo.
+            TrainingLoadSection()
             // Screen-5 recovery detail: the CONTRIBUTORS to today's recovery as
             // labelled progress bars (HRV / Resting HR / Sleep / Respiratory), each
             // scored against the on-device baseline. Depends only on `repo`.
@@ -1112,6 +1118,101 @@ private struct VitalitySection: View {
     private func load() async {
         vitality = (await repo.exploreSeries(key: "vitality", source: "my-whoop")).last?.value
         bodyAge = (await repo.exploreSeries(key: "body_age", source: "my-whoop")).last?.value
+        loaded = true
+    }
+}
+
+// MARK: - Training Load Balance
+
+/// The "Training Load" section: this week's Acute:Chronic Workload Ratio (Gabbett 2016), a published
+/// sports-science signal for whether recent training is climbing faster than the body has adapted to.
+/// Reads the three MetricPoints IntelligenceEngine already persists (`training_load_ratio`/`_acute`/
+/// `_chronic`) — no recomputation here, just an honest readback of the stored weekly snapshot. Shown
+/// unconditionally on Health (not opt-in via "Your cards") so the feature isn't buried.
+private struct TrainingLoadSection: View {
+    @EnvironmentObject var repo: Repository
+    @State private var ratio: Double?
+    @State private var acute: Double?
+    @State private var chronic: Double?
+    @State private var loaded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("Training Load", overline: "Weekly",
+                          trailing: ratio != nil ? String(format: "%.2f×", ratio!) : nil)
+            if let r = ratio {
+                hero(ratio: r)
+            } else if loaded {
+                ComingSoon(what: "A few more weeks of Effort data and we can show your Training Load.",
+                           symbol: "gauge.with.dots.needle.67percent")
+            } else {
+                ComingSoon(what: "Reading your Training Load…", symbol: "gauge.with.dots.needle.67percent")
+            }
+        }
+        .task(id: repo.refreshSeq) { await load() }
+    }
+
+    private func hero(ratio r: Double) -> some View {
+        let tier = TrainingLoadEngine.tier(for: r)
+        let tint: Color = {
+            switch tier {
+            case .low:      return StrandPalette.metricCyan
+            case .balanced: return StrandPalette.chargeColor
+            case .elevated: return StrandPalette.metricAmber
+            case .high:     return StrandPalette.statusWarning
+            }
+        }()
+        return VStack(alignment: .leading, spacing: NoopMetrics.space4) {
+            HStack(alignment: .center, spacing: NoopMetrics.space5) {
+                VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                    Text("This week").strandOverline()
+                    Text(tier.label)
+                        .font(StrandFont.rounded(30))
+                        .foregroundStyle(tint)
+                }
+                Spacer(minLength: 0)
+                if let a = acute, let c = chronic {
+                    VStack(alignment: .trailing, spacing: NoopMetrics.space1) {
+                        Text("7-day vs 28-day avg").strandOverline()
+                        Text("\(Int(a.rounded())) vs \(Int(c.rounded()))")
+                            .font(StrandFont.number(20))
+                            .foregroundStyle(StrandPalette.textPrimary)
+                    }
+                }
+            }
+            Divider().overlay(StrandPalette.hairline)
+            Text(explainer(for: tier))
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+        }
+        .padding(NoopMetrics.space5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            FrostedCardSurface(tint: tint, cornerRadius: NoopMetrics.cardRadius)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Training Load: \(tier.label), ratio \(String(format: "%.2f", r))")
+    }
+
+    /// Plain-language read of the tier, same spirit as the ComingSoon copy elsewhere — never framed as
+    /// medical advice, just the published heuristic in a sentence.
+    private func explainer(for tier: TrainingLoadEngine.Tier) -> String {
+        switch tier {
+        case .low:
+            return "This week's Effort is well below your last month's norm — easing off or recovering."
+        case .balanced:
+            return "This week's Effort is tracking your last month's norm — a sustainable ramp."
+        case .elevated:
+            return "This week's Effort is climbing faster than your last month's norm. Not a problem on its own, but worth watching."
+        case .high:
+            return "This week's Effort is climbing well above your last month's norm — published research on this ratio links a spike this size to a higher injury rate."
+        }
+    }
+
+    private func load() async {
+        ratio = (await repo.exploreSeries(key: "training_load_ratio", source: "my-whoop")).last?.value
+        acute = (await repo.exploreSeries(key: "training_load_acute", source: "my-whoop")).last?.value
+        chronic = (await repo.exploreSeries(key: "training_load_chronic", source: "my-whoop")).last?.value
         loaded = true
     }
 }
