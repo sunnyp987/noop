@@ -83,14 +83,18 @@ public enum StrandPalette {
     // MARK: Glow — ambient bloom behind heroes / charts (additive on dark; faint warm on light)
     public static let glowAmbient    = Color(light: "#F0E4C0", dark: "#3A2D0A")
 
-    // MARK: Accent — chrome anchor (links, selection, focus, generic accent). On DARK this is the brand
-    // GOLD; on LIGHT it shifts to the deep brand BLUE so gold is reserved for the recovery/Charge world
-    // and the gold FAB — keeping the light theme from reading as wall-to-wall gold (the maintainer 2026-06-16).
-    public static let accent         = Color(light: "#234F9E", dark: "#60A0E0") // WHOOP link/action blue (gold killed 2026-06-22)
-    public static let accentHover    = Color(light: "#1C3F80", dark: "#8FBEEC")
-    public static let accentMuted    = Color(light: "#E4ECF6", dark: "#16233A") // selected-row tint (pale blue / dark blue)
-    /// Focus ring color (blue on both schemes — WHOOP has no gold).
-    public static let focusRing      = Color(light: "#2F6FCB", dark: "#60A0E0")
+    // MARK: Accent — chrome anchor (links, selection, focus, generic accent). RESTORED to the actual
+    // "Titanium & Gold" brand gold on both schemes (2026-09-21): a prior pass had repointed this to
+    // WHOOP's own link blue ("gold killed 2026-06-22"), so the app icon carried the gold rebrand but the
+    // live chrome never did — every button, link, selected row and focus ring was still reading as
+    // WHOOP's blue. A warm antique gold on light (reads on white without glowing) and a brighter
+    // champagne gold on dark (the icon's own core-dot hue) so the brand identity is consistent from the
+    // Home Screen icon all the way through the UI.
+    public static let accent         = Color(light: "#8A6A28", dark: "#D9B15C")
+    public static let accentHover    = Color(light: "#6E5220", dark: "#EAC97C")
+    public static let accentMuted    = Color(light: "#F3E9CE", dark: "#2E2611") // selected-row tint (warm cream / deep bronze)
+    /// Focus ring color — brand gold on both schemes.
+    public static let focusRing      = Color(light: "#8A6A28", dark: "#D9B15C")
     /// Opacity for dimmed/disabled sections (shared so screens don't invent their own value).
     public static let disabledOpacity: Double = 0.45
 
@@ -272,15 +276,18 @@ public enum StrandPalette {
     // titanium ramp (tiles, avatars, icon plates). Same names + hexes on Android so
     // Apple and Android match byte-for-byte.
 
-    /// Brand gold — primary accent. Gold FILLS stay bright (dark text on them is legible in both schemes);
-    /// only a hair deeper on light so the fill doesn't wash out against white.
-    public static let gold          = Color(light: "#3A78C8", dark: "#60A0E0") // repointed to WHOOP blue (gold killed 2026-06-22)
-    /// Bright blue — accent highlight / hover (was champagne).
-    public static let goldLight     = Color(light: "#6FA8E0", dark: "#9FC8F0")
-    /// Deep blue — accent low stop (was bronze).
-    public static let goldDeep      = Color(light: "#2A5C9E", dark: "#3A78C8")
-    /// Near-black brown — text / icons placed ON gold surfaces (scheme-invariant; gold fills stay gold).
-    public static let goldDeepText  = Color(hex: "#FFFFFF") // white text/icons on accent fills (WHOOP, gold killed)
+    /// Brand gold — primary accent. RESTORED to actual gold (2026-09-21, see `accent` above) after a
+    /// prior pass had repointed every one of these to a WHOOP-blue ramp. Gold FILLS stay bright (dark
+    /// text on them is legible in both schemes); only a hair deeper on light so the fill doesn't wash
+    /// out against white.
+    public static let gold          = Color(light: "#9C7A32", dark: "#D9B15C")
+    /// Champagne — accent highlight / hover.
+    public static let goldLight     = Color(light: "#C7A55E", dark: "#EFD595")
+    /// Deep bronze — accent low stop.
+    public static let goldDeep      = Color(light: "#6E5220", dark: "#9C7A32")
+    /// Near-black ink — text / icons placed ON gold surfaces (a bright gold fill needs dark text on both
+    /// schemes to stay legible; white would wash out against champagne/light gold).
+    public static let goldDeepText  = Color(hex: "#1C1608")
     /// The bright core dot at a gauge arc tip / sparkline head. White reads as a highlight on the dark
     /// canvas; on light it would vanish into the white card, so it flips to a deep ink that reads as a
     /// crisp centre on the (deepened) coloured tip bead.
