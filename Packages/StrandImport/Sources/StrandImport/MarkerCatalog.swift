@@ -261,4 +261,78 @@ public enum MarkerCatalog {
             higherIsBetter: nil
         )
     }
+
+    // MARK: - Panel groups (display-only sub-grouping within .bloodPanel)
+
+    /// Purely organisational sub-grouping of the ~120 `.bloodPanel` markers into the same panel
+    /// names a Superpower/Quest-style report groups its own results under (Lipids, Metabolic,
+    /// Kidney, …) — so a full ~100-marker scan reads like the source report instead of one long
+    /// alphabetised list. This is DISPLAY ONLY: it doesn't touch `LabMarkerCategory` (the stored
+    /// schema value), carries no reference ranges, and doesn't judge any value — see the
+    /// NON-CLINICAL note on `LabMarkerCategory` itself.
+    public static let panelGroupOrder: [String] = [
+        "Lipids", "Metabolic & glucose", "Complete blood count", "Iron & anemia", "Kidney",
+        "Liver & protein", "Electrolytes & minerals", "Thyroid", "Hormones",
+        "Vitamins", "Inflammation & immune", "Other",
+    ]
+
+    private static let panelGroupByKey: [String: String] = {
+        var m: [String: String] = [:]
+        func tag(_ group: String, _ keys: [String]) { for k in keys { m[k] = group } }
+        tag("Lipids", [
+            "total_cholesterol", "ldl", "hdl", "triglycerides", "non_hdl_cholesterol", "apob",
+            "apoa1", "lp_a", "cholesterol_hdl_ratio", "ldl_hdl_ratio", "triglyceride_hdl_ratio",
+            "castelli_risk_index_1", "castelli_risk_index_2", "atherogenic_index_plasma",
+            "oxidized_ldl", "omega_3_index",
+        ])
+        tag("Metabolic & glucose", [
+            "fasting_glucose", "hba1c", "fasting_insulin", "homa_ir", "c_peptide", "fructosamine",
+            "uric_acid", "tyg_index",
+        ])
+        tag("Complete blood count", [
+            "lymphocyte_pct", "mcv", "rdw", "wbc_count", "rbc_count", "hematocrit",
+            "platelet_count", "mch", "mchc", "mpv", "neutrophil_pct", "monocyte_pct",
+            "eosinophil_pct", "basophil_pct", "neutrophil_absolute", "lymphocyte_absolute",
+            "monocyte_absolute", "eosinophil_absolute", "basophil_absolute",
+            "neutrophil_lymphocyte_ratio", "platelet_lymphocyte_ratio", "monocyte_lymphocyte_ratio",
+        ])
+        tag("Iron & anemia", [
+            "ferritin", "iron", "transferrin_saturation", "haemoglobin", "tibc", "transferrin",
+            "rbc_folate", "methylmalonic_acid",
+        ])
+        tag("Kidney", ["egfr", "creatinine", "bun", "bun_creatinine_ratio", "cystatin_c", "cystatin_c_egfr"])
+        tag("Liver & protein", [
+            "alt", "ast", "ggt", "total_bilirubin", "direct_bilirubin", "total_protein",
+            "globulin", "ag_ratio", "alkaline_phosphatase", "albumin",
+        ])
+        tag("Electrolytes & minerals", [
+            "sodium", "potassium", "calcium", "magnesium", "phosphorus", "chloride", "co2",
+            "zinc", "copper", "selenium", "magnesium_rbc", "corrected_calcium",
+        ])
+        tag("Thyroid", [
+            "tsh", "free_t4", "free_t3", "total_t3", "total_t4", "reverse_t3",
+            "tpo_antibodies", "thyroglobulin_antibodies",
+        ])
+        tag("Hormones", [
+            "testosterone_total", "testosterone_free", "shbg", "estradiol", "progesterone",
+            "dhea_s", "cortisol", "lh", "fsh", "prolactin", "igf_1", "psa",
+        ])
+        tag("Vitamins", [
+            "vitamin_d", "vitamin_b12", "folate", "vitamin_a", "vitamin_e", "vitamin_k",
+            "vitamin_b6", "homocysteine",
+        ])
+        tag("Inflammation & immune", [
+            "crp", "esr", "fibrinogen", "immunoglobulin_a", "immunoglobulin_e", "ana_titer",
+            "rheumatoid_factor", "ccp_antibody", "dsdna_antibody", "ttg_antibody", "adma", "sdma",
+        ])
+        return m
+    }()
+
+    /// The display panel group for a `.bloodPanel` key ("Lipids", "Kidney", …), or "Other" for a
+    /// custom marker or any built-in key not yet tagged above. `nil` only for keys outside the
+    /// blood panel (blood pressure / body measurements already have their own top-level category).
+    public static func panelGroup(for key: String) -> String? {
+        guard byKey[key] == nil || byKey[key]?.category == .bloodPanel else { return nil }
+        return panelGroupByKey[key] ?? "Other"
+    }
 }

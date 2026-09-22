@@ -440,14 +440,44 @@ struct LabBookView: View {
 
     @ViewBuilder
     private func categorySection(_ category: LabMarkerCategory) -> some View {
-        let keys = markerKeys(in: category)
-        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader(LocalizedStringKey(category.displayName),
-                          overline: keys.count == 1 ? "1 marker" : "\(keys.count) markers")
-            ForEach(keys, id: \.self) { key in
-                markerRow(key)
+        if category == .bloodPanel {
+            // A full scan can land 50-100+ markers here — split into the same panel groups
+            // (Lipids, CBC, Kidney, …) a Quest/Superpower-style report itself uses, instead of
+            // one long alphabetised list.
+            ForEach(presentPanelGroups, id: \.self) { group in
+                let keys = markerKeys(inPanelGroup: group)
+                VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+                    SectionHeader(LocalizedStringKey(group),
+                                  overline: keys.count == 1 ? "1 marker" : "\(keys.count) markers")
+                    ForEach(keys, id: \.self) { key in
+                        markerRow(key)
+                    }
+                }
+            }
+        } else {
+            let keys = markerKeys(in: category)
+            VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+                SectionHeader(LocalizedStringKey(category.displayName),
+                              overline: keys.count == 1 ? "1 marker" : "\(keys.count) markers")
+                ForEach(keys, id: \.self) { key in
+                    markerRow(key)
+                }
             }
         }
+    }
+
+    /// Panel groups actually present in the current `.bloodPanel` readings, in the gold-standard
+    /// report order (Lipids, Metabolic, CBC, … — same order a Quest/Superpower report uses).
+    private var presentPanelGroups: [String] {
+        let keys = markerKeys(in: .bloodPanel)
+        let present = Set(keys.compactMap { MarkerCatalog.panelGroup(for: $0) })
+        return MarkerCatalog.panelGroupOrder.filter { present.contains($0) }
+    }
+
+    /// Distinct `.bloodPanel` marker keys in one panel group, alphabetised by display name.
+    private func markerKeys(inPanelGroup group: String) -> [String] {
+        markerKeys(in: .bloodPanel)
+            .filter { MarkerCatalog.panelGroup(for: $0) == group }
     }
 
     /// Distinct marker keys in a category, alphabetised by display name.
