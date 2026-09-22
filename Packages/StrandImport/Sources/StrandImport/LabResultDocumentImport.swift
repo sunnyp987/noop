@@ -180,11 +180,28 @@ public enum LabResultDocumentImport {
     /// A very loose "might be a result row" check, used only to decide whether a line that
     /// failed catalog-matching counts toward `unrecognizedLineCount` (so a page number or a
     /// sentence of prose doesn't inflate that count).
+    ///
+    /// A real Quest-style report page is mostly NOT result rows: a patient header (DOB/Health
+    /// ID/Requisition/Client #, one per line, each carrying a number), a mailing address (a
+    /// street line starting with a house number, a "City ST 12345" line), page numbers ("PAGE 1
+    /// OF 5"), and footnote/citation prose ("doi:…", "…et al. 2019.") all technically satisfy
+    /// "2+ tokens with a number after the first" — without these checks they'd fill up
+    /// `unrecognizedSamples`' fixed 40-line budget with junk instead of genuine coverage gaps.
     private static func looksLikeResultRow(_ line: String) -> Bool {
         guard line.count <= 240 else { return false }
-        let tokens = line.split(separator: " ")
+        let tokens = line.split(separator: " ").map(String.init)
         guard tokens.count >= 2 else { return false }
-        return tokens.dropFirst().contains { numericValue(String($0)) != nil || LabMarkerCsvImport.bloodPressurePair(String($0)) != nil }
+        guard !line.contains(":") else { return false }                       // "DOB: …", "Health ID: …"
+        guard let first = tokens.first?.first, first.isLetter else { return false }  // never starts with a digit (street number)
+        if tokens[0].uppercased() == "PAGE" { return false }                   // "PAGE 1 OF 5"
+        if line.lowercased().contains("et al") { return false }                // citation prose
+        if tokens.count >= 2, tokens[tokens.count - 2].count == 2,
+           tokens[tokens.count - 2].uppercased() == tokens[tokens.count - 2],
+           tokens[tokens.count - 2].allSatisfy({ $0.isLetter }),
+           tokens.last?.count == 5, tokens.last?.allSatisfy({ $0.isNumber }) == true {
+            return false                                                       // "Lewisville TX 75067"
+        }
+        return tokens.dropFirst().contains { numericValue($0) != nil || LabMarkerCsvImport.bloodPressurePair($0) != nil }
     }
 
     /// Try to read one line as "<marker name> <value> [unit] [reference text…]". The name

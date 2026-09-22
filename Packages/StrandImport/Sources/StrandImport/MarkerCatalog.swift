@@ -79,6 +79,7 @@ public enum MarkerCatalog {
         // Glucose
         .init(key: "fasting_glucose", displayName: "Fasting glucose", category: .bloodPanel, canonicalUnit: "mmol/L", decimals: 1, referenceTextHint: fromReport),
         .init(key: "hba1c", displayName: "HbA1c", category: .bloodPanel, canonicalUnit: "mmol/mol", decimals: 0, referenceTextHint: fromReport),
+        .init(key: "estimated_average_glucose", displayName: "Estimated average glucose (eAG)", category: .bloodPanel, canonicalUnit: "mg/dL", decimals: 0, referenceTextHint: fromReport),
         // Not in every panel (e.g. missing from a first Superpower run) but common enough on a
         // follow-up metabolic panel to be worth a slot of its own rather than falling to a custom marker.
         .init(key: "fasting_insulin", displayName: "Fasting insulin", category: .bloodPanel, canonicalUnit: "µIU/mL", decimals: 1, referenceTextHint: fromReport),
@@ -290,7 +291,7 @@ public enum MarkerCatalog {
             "oxidized_ldl", "omega_3_index",
         ])
         tag("Metabolic & glucose", [
-            "fasting_glucose", "hba1c", "fasting_insulin", "homa_ir", "c_peptide", "fructosamine",
+            "fasting_glucose", "hba1c", "estimated_average_glucose", "fasting_insulin", "homa_ir", "c_peptide", "fructosamine",
             "uric_acid", "tyg_index",
         ])
         tag("Complete blood count", [

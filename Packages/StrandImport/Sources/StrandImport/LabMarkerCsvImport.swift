@@ -284,6 +284,8 @@ public enum LabMarkerCsvImport {
             "glucose": "fasting_glucose", "blood_glucose": "fasting_glucose",
             "glucose_fasting": "fasting_glucose",
             "a1c": "hba1c", "hb_a1c": "hba1c", "hemoglobin_a1c": "hba1c",
+            "eag": "estimated_average_glucose", "eag_mg_dl": "estimated_average_glucose",
+            "eag_mmol_l": "estimated_average_glucose",
             "vit_d": "vitamin_d", "vitamin_d3": "vitamin_d", "25_oh_vitamin_d": "vitamin_d",
             "b12": "vitamin_b12", "vit_b12": "vitamin_b12",
             "folic_acid": "folate",
