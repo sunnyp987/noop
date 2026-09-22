@@ -184,9 +184,10 @@ public enum LabResultDocumentImport {
     /// A real Quest-style report page is mostly NOT result rows: a patient header (DOB/Health
     /// ID/Requisition/Client #, one per line, each carrying a number), a mailing address (a
     /// street line starting with a house number, a "City ST 12345" line), page numbers ("PAGE 1
-    /// OF 5"), and footnote/citation prose ("doi:…", "…et al. 2019.") all technically satisfy
-    /// "2+ tokens with a number after the first" — without these checks they'd fill up
-    /// `unrecognizedSamples`' fixed 40-line budget with junk instead of genuine coverage gaps.
+    /// OF 5"), and footnote/citation/interpretation prose ("doi:…", "…et al. 2019.", "Optimal
+    /// <90", "Consider retesting in 1 to 2 weeks to…") all technically satisfy "2+ tokens with a
+    /// number after the first" — without these checks they'd fill up `unrecognizedSamples`' fixed
+    /// 40-line budget with junk instead of genuine coverage gaps.
     private static func looksLikeResultRow(_ line: String) -> Bool {
         guard line.count <= 240 else { return false }
         let tokens = line.split(separator: " ").map(String.init)
@@ -201,7 +202,17 @@ public enum LabResultDocumentImport {
            tokens.last?.count == 5, tokens.last?.allSatisfy({ $0.isNumber }) == true {
             return false                                                       // "Lewisville TX 75067"
         }
-        return tokens.dropFirst().contains { numericValue($0) != nil || LabMarkerCsvImport.bloodPressurePair($0) != nil }
+        guard let numIdx = tokens.dropFirst().firstIndex(where: {
+            numericValue($0) != nil || LabMarkerCsvImport.bloodPressurePair($0) != nil
+        }) else { return false }
+        // A real Quest/Superpower test name is printed IN CAPS ("IRON, TOTAL", "CORTISOL, TOTAL",
+        // "SEX HORMONE BINDING"). A sentence of reference-range interpretation ("Optimal <90",
+        // "Consider retesting in 1 to 2 weeks to…", "diabetes with >1 risk factors…") reads in
+        // normal sentence case — ANY lowercase letter before the number means this is prose, not
+        // a test-name-then-value row, regardless of how many tokens or numbers it carries.
+        let name = tokens[0..<numIdx].joined()
+        guard !name.contains(where: { $0.isLowercase }) else { return false }
+        return true
     }
 
     /// Try to read one line as "<marker name> <value> [unit] [reference text…]". The name
