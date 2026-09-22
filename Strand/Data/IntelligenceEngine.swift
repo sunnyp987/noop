@@ -942,6 +942,21 @@ final class IntelligenceEngine: ObservableObject {
                     diagnosticSink?(WorkoutsTrace.detectedBoutLine(
                         verdict: "persisted", durMin: durMin, avgBpm: avgBpm), .workouts)
                 }
+                // Heart-rate recovery (HRR60, Cole et al. 1999): a genuinely new signal from raw HR
+                // samples the app already stores in the minutes after a workout ends but never scored.
+                // Directional only (bigger drop = fitter), see HRRecoveryEngine's header for why this
+                // does NOT import Cole's clinical mortality cutoff (that was validated for a standardized
+                // graded treadmill test, not a free-living detected workout).
+                if let hrAtEndSample = try? await store.hrSamples(
+                    deviceId: computedId, from: s.end - 15, to: s.end, limit: 5).last,
+                   let postSamples = try? await store.hrSamples(
+                    deviceId: computedId, from: s.end, to: s.end + 90, limit: 120),
+                   let hrr = HRRecoveryEngine.hrr60(
+                    endTs: s.end, durationSec: s.durationS, hrAtEnd: hrAtEndSample.bpm,
+                    postSamples: postSamples.map { HRRecoveryEngine.Sample(ts: $0.ts, bpm: $0.bpm) }) {
+                    restPoints.append(MetricPoint(day: AnalyticsEngine.dayString(s.end, offsetSec: tzOffset),
+                                                  key: "hr_recovery_60s", value: hrr))
+                }
             }
         }
 

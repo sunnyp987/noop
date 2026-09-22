@@ -38,9 +38,14 @@ enum WhoopImporter {
                 respRateBpm: c.respiratoryRate))
         }
 
-        // sleeps → CachedSleepSession (stage durations encoded as JSON; export has no per-epoch timeline)
+        // sleeps → CachedSleepSession (stage durations encoded as JSON; export has no per-epoch timeline).
+        // Naps are INCLUDED (previously filtered out and silently discarded entirely, losing every nap
+        // in a user's import): `mainSessionByDay` elsewhere (IntelligenceEngine) already picks the
+        // LONGEST session per day, so a same-day nap never displaces the real overnight sleep as "the"
+        // sleep for that day — it just stops being thrown away, available as its own stored session for
+        // any future nap-aware scoring (sleep debt, circadian load) instead of vanishing on import.
         var sessions: [CachedSleepSession] = []
-        for s in result.sleeps where !s.isNap {
+        for s in result.sleeps {
             guard let onset = s.sleepOnset, let wake = s.wakeOnset else { continue }
             let stages: [String: Double] = [
                 "light": s.lightSleepDurationMin ?? 0,

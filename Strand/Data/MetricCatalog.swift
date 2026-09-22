@@ -105,6 +105,8 @@ enum MetricCatalog {
         // ── Heart
         d("avg_hr", String(localized: "Average Heart Rate"), "Heart", "bpm", "my-whoop", "heart", 0, nil),
         d("max_hr", String(localized: "Max Heart Rate"), "Heart", "bpm", "my-whoop", "bolt.heart", 0, nil),
+        d("hr_recovery_60s", String(localized: "HR Recovery"), "Heart", "bpm", "my-whoop", "arrow.down.heart", 0, true,
+          String(localized: "How much your heart rate drops in the first 60 seconds after a workout ends — a bigger drop reflects healthier post-exercise recovery.")),
         d("energy_kcal", String(localized: "Calories"), "Heart", "kcal", "my-whoop", "flame", 0, nil),
         d("vo2max", String(localized: "VO₂ Max"), "Heart", "", "apple-health", "lungs.fill", 1, true),
         d("fitness_age", String(localized: "Fitness Age"), "Heart", "yrs", "my-whoop", "figure.run", 0, false),
