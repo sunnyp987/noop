@@ -30,6 +30,11 @@ enum DashboardCard: String, CaseIterable, Identifiable {
     /// (as "vo2max_est") and shown on the Health screen's Fitness Age section; this surfaces it as its
     /// own dashboard card too, since it wasn't obviously discoverable there.
     case vo2max
+    /// Training Load Balance (Acute:Chronic Workload Ratio, StrandAnalytics TrainingLoadEngine): whether
+    /// this week's Effort/Strain is climbing faster than the last month's norm, a published (Gabbett
+    /// 2016) sports-science signal several cohort studies associate with higher injury rates when
+    /// pushed too high. A genuinely new metric, not currently shown anywhere else in the app.
+    case trainingLoad
     case bloodOxygen
     case skinTemp
     case sleep
@@ -56,6 +61,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .fitnessAge:  return String(localized: "Fitness Age")
         case .vitality:    return String(localized: "Vitality")
         case .vo2max:      return String(localized: "VO2 Max")
+        case .trainingLoad: return String(localized: "Training Load")
         case .bloodOxygen: return String(localized: "Blood Oxygen")
         case .skinTemp:    return String(localized: "Skin Temp")
         case .sleep:       return String(localized: "Sleep")
@@ -77,6 +83,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .fitnessAge:  return String(localized: "Updated weekly")
         case .vitality:    return String(localized: "Wellness score")
         case .vo2max:      return String(localized: "Estimated aerobic fitness")
+        case .trainingLoad: return String(localized: "This week vs your last month")
         case .bloodOxygen: return String(localized: "Blood oxygen")
         case .skinTemp:    return String(localized: "Skin temperature")
         case .sleep:       return String(localized: "Last night")
@@ -97,6 +104,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .fitnessAge:  return "figure.run"
         case .vitality:    return "sparkles"
         case .vo2max:      return "lungs.fill"
+        case .trainingLoad: return "gauge.with.dots.needle.67percent"
         case .bloodOxygen: return "drop.fill"
         case .skinTemp:    return "thermometer.medium"
         case .sleep:       return "bed.double.fill"
@@ -117,6 +125,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .fitnessAge:  return "yrs"
         case .vitality:    return ""
         case .vo2max:      return "mL/kg/min"
+        case .trainingLoad: return ""    // value is a plain-language tier, e.g. "Balanced", not a raw number
         case .bloodOxygen: return ""    // value carries the % itself
         case .skinTemp:    return ""    // value carries the ° itself
         case .sleep:       return ""    // value carries the h/m itself

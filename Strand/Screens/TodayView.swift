@@ -256,6 +256,11 @@ struct TodayView: View {
     /// series the Health screen's Fitness Age section already reads , no new computation, just a second
     /// place to see it.
     @State private var vo2maxToday: Double?
+    /// Training Load Balance ratio (Acute:Chronic Workload Ratio, StrandAnalytics TrainingLoadEngine),
+    /// read from "training_load_ratio". Displayed as a plain-language tier ("Balanced"/"Elevated"/etc,
+    /// via TrainingLoadEngine.Tier), never the raw ratio number, so it reads as a clear signal rather
+    /// than a figure the user has to interpret themselves.
+    @State private var trainingLoadRatio: Double?
     /// Distinct days + sleep sessions imported from a Mi Band (Mi Fitness), for the Data Sources row.
     @State private var xiaomiDays = 0
     @State private var xiaomiSleeps = 0
@@ -2317,6 +2322,11 @@ struct TodayView: View {
             // already shows VO2max in the same mL/kg/min unit, so this card is a second way to see it.
             pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
                           value: dashboardValue(card)) { HealthView() }
+        case .trainingLoad:
+            // No dedicated detail screen yet; the Health screen is the closest existing home for a
+            // weekly-rollup training signal (same destination pattern as Fitness Age/Vitality/VO2max).
+            pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
+                          value: dashboardValue(card)) { HealthView() }
         case .hrv, .restingHr, .respiratory, .bloodOxygen, .skinTemp:
             // The overnight vitals share the Health detail screen (the vital-signs surface).
             pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
@@ -2349,6 +2359,7 @@ struct TodayView: View {
         case .fitnessAge:  return StrandPalette.chargeColor
         case .vitality:    return StrandPalette.restColor
         case .vo2max:      return StrandPalette.metricPurple
+        case .trainingLoad: return StrandPalette.effortColor
         case .hrv:         return StrandPalette.metricPurple
         case .restingHr:   return StrandPalette.metricRose
         case .respiratory: return StrandPalette.accent
@@ -2419,6 +2430,8 @@ struct TodayView: View {
             return vitalityToday.map { "\(Int($0.rounded()))" } ?? "—"
         case .vo2max:
             return withUnit(vo2maxToday.map { String(format: "%.0f", $0) } ?? "—")
+        case .trainingLoad:
+            return trainingLoadRatio.map { TrainingLoadEngine.tier(for: $0).label } ?? "—"
         case .hydration:
             // "<total> / <goal> L" in litres to 1 dp (the string bakes in the " L" itself). Always shows a
             // value (a fresh day reads "0.0 / 3.2 L"); the goal is always derivable from the profile.
@@ -3940,6 +3953,7 @@ struct TodayView: View {
         async let fitnessAgeSeriesA  = repo.exploreSeries(key: "fitness_age", source: "my-whoop")
         async let vitalitySeriesA    = repo.exploreSeries(key: "vitality", source: "my-whoop")
         async let vo2maxSeriesA      = repo.exploreSeries(key: "vo2max_est", source: "my-whoop")
+        async let trainingLoadSeriesA = repo.exploreSeries(key: "training_load_ratio", source: "my-whoop")
 
         // Steps ESTIMATE per day (WHOOP 4.0 motion → calibrated steps). exploreSeries reads the computed
         // "-noop" metricSeries the IntelligenceEngine writes, exactly like the Explore "steps_est" metric.
@@ -3964,6 +3978,7 @@ struct TodayView: View {
         fitnessAgeToday = (await fitnessAgeSeriesA).last?.value
         vitalityToday = (await vitalitySeriesA).last?.value
         vo2maxToday = (await vo2maxSeriesA).last?.value
+        trainingLoadRatio = (await trainingLoadSeriesA).last?.value
         // Hydration card (opt-in): today's stored total + the sex/Effort goal. Only loaded when the
         // feature is on, so a disabled feature does zero work and the card stays hidden.
         await reloadHydration()
@@ -3990,7 +4005,8 @@ struct TodayView: View {
             stressToday: stressToday,
             fitnessAgeToday: fitnessAgeToday,
             vitalityToday: vitalityToday,
-            vo2maxToday: vo2maxToday
+            vo2maxToday: vo2maxToday,
+            trainingLoadRatio: trainingLoadRatio
         )
     }
 
@@ -4010,6 +4026,7 @@ struct TodayView: View {
         fitnessAgeToday = c.fitnessAgeToday
         vitalityToday = c.vitalityToday
         vo2maxToday = c.vo2maxToday
+        trainingLoadRatio = c.trainingLoadRatio
         // Hydration is deliberately NOT part of the snapshot (#989): logging a drink never bumps
         // refreshSeq, so a restored total could be stale. It is re-read live instead (see loadAll).
     }
@@ -4546,6 +4563,7 @@ struct TodayHistoryWideCache {
     let fitnessAgeToday: Double?
     let vitalityToday: Double?
     let vo2maxToday: Double?
+    let trainingLoadRatio: Double?
     // Hydration total/goal intentionally absent (#989): mutations don't bump refreshSeq, so a cached
     // value could restore stale. TodayView re-reads hydration live on restore instead.
 }

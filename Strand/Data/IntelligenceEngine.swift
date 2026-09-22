@@ -1125,6 +1125,26 @@ final class IntelligenceEngine: ObservableObject {
             UserDefaults.standard.set(true, forKey: Self.fitnessVitalityBackfillFlagKey)
         }
 
+        // ── Training Load Balance (Acute:Chronic Workload Ratio) ─────────────────────────────────────
+        // A published sports-science measure (Gabbett 2016) of whether recent training load is climbing
+        // faster than the body has adapted to: mean Effort/Strain over the last 7 days ÷ mean over the
+        // last 28. ~1.0 = this week matches your recent norm; well above 1.0 is the range several cohort
+        // studies associate with higher injury rates. Reuses `faVitalityPool` (already deduped computed +
+        // WHOOP-import strain values) — no new data dependency, just a rolling read of a number the app
+        // already scores every day. Recomputed every pass (a live "current load" read, not a historical
+        // backfill), keyed to the pool's own most recent day, same honesty-about-which-day convention as
+        // the Fitness Age fold above.
+        let loadSeries = faVitalityPool.sorted { $0.day < $1.day }
+        if let loadResult = TrainingLoadEngine.compute(dailyStrain: loadSeries.map { $0.strain }),
+           let loadAnchor = loadSeries.last?.day {
+            let loadSatDay = loadAnchor   // daily, not weekly — persisted under its own real day
+            _ = try? await store.upsertMetricSeries([
+                MetricPoint(day: loadSatDay, key: "training_load_ratio", value: loadResult.ratio),
+                MetricPoint(day: loadSatDay, key: "training_load_acute", value: loadResult.acute),
+                MetricPoint(day: loadSatDay, key: "training_load_chronic", value: loadResult.chronic),
+            ], deviceId: computedId)
+        }
+
         // ── Steps ESTIMATE (WHOOP 4.0) , DAILY, keyed to each strap-only day ────────────────────────
         // A WHOOP 4.0 sends no step count over BLE, so for days the phone DIDN'T also count steps we
         // estimate them: calibrate the strap's daily MOTION VOLUME against the phone's real step count
