@@ -49,6 +49,13 @@ struct LabBookView: View {
     @State private var csvSummary: String?
     @State private var csvFailed = false
 
+    // Document scan import (LabResultDocumentImport — a PDF or photo of a lab report).
+    @State private var showingDocImporter = false   // macOS .fileImporter presentation
+    @State private var docScanning = false
+    @State private var docSummary: String?
+    @State private var docFailed = false
+    @State private var pendingDocReview: LabResultDocumentImport.Result?
+
     var body: some View {
         ScreenScaffold(
             title: "Lab Book",
@@ -92,6 +99,11 @@ struct LabBookView: View {
         .sheet(isPresented: $showingDisclaimer) {
             LabBookDisclaimerView()
         }
+        .sheet(item: docReviewBinding) { wrapper in
+            LabDocumentReviewView(result: wrapper.result, deviceId: repo.deviceId) { rows in
+                await saveDocRows(rows)
+            }
+        }
         // macOS picker for the markers CSV; iOS goes through DocumentPicker (see
         // presentCsvImporter) for the iCloud download-on-pick behaviour (#179).
         .fileImporter(isPresented: $showingCsvImporter,
@@ -104,6 +116,25 @@ struct LabBookView: View {
                 NSLog("Import: markers CSV picker failed - \(error.localizedDescription)")
             }
         }
+        // macOS picker for a lab-report document (PDF or photo); iOS goes through
+        // DocumentPicker (see presentDocImporter) for the iCloud download-on-pick behaviour.
+        .fileImporter(isPresented: $showingDocImporter,
+                      allowedContentTypes: [.pdf, .image],
+                      allowsMultipleSelection: false) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first { importLabDocument(url: url) }
+            case .failure(let error):
+                NSLog("Import: lab document picker failed - \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private var docReviewBinding: Binding<LabDocResultID?> {
+        Binding(
+            get: { pendingDocReview.map(LabDocResultID.init) },
+            set: { pendingDocReview = $0?.result }
+        )
     }
 
     // MARK: - Header (count + scope + actions)
@@ -200,8 +231,83 @@ struct LabBookView: View {
                         .foregroundStyle(csvFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                Divider().overlay(StrandPalette.hairline)
+                Text("Or scan an actual lab report (PDF or a photo of the printout, e.g. a Superpower panel). Baseline reads it on \(Platform.deviceNounPhrase) — nothing is uploaded — and always shows you what it found before saving anything.")
+                    .font(StrandFont.subhead)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Button {
+                        presentDocImporter()
+                    } label: {
+                        Label(docScanning ? "Reading…" : "Scan a lab result…", systemImage: "text.viewfinder")
+                    }
+                    .buttonStyle(.noopSecondary)
+                    .disabled(docScanning)
+                    .accessibilityLabel("Scan a lab result PDF or photo to import")
+                    if docScanning { ProgressView().controlSize(.small) }
+                }
+                if let s = docSummary {
+                    Text(s).font(StrandFont.subhead)
+                        .foregroundStyle(docFailed ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
+    }
+
+    private func presentDocImporter() {
+        #if os(iOS)
+        Task {
+            guard let url = await DocumentPicker.importFile([.pdf, .image]) else { return } // cancelled
+            importLabDocument(url: url)
+        }
+        #else
+        showingDocImporter = true
+        #endif
+    }
+
+    /// Extract text on-device (LabDocumentTextExtractor) and parse it (LabResultDocumentImport),
+    /// then hand the detected rows to the mandatory review sheet — nothing is saved from here.
+    private func importLabDocument(url: URL) {
+        docScanning = true
+        docSummary = nil
+        docFailed = false
+        Task {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let text = await LabDocumentTextExtractor.extractText(from: url) else {
+                docSummary = String(localized: "Couldn't read any text from that file.")
+                docFailed = true
+                docScanning = false
+                return
+            }
+            let result = LabResultDocumentImport.parse(text: text)
+            docScanning = false
+            guard !result.rows.isEmpty else {
+                docSummary = String(localized: "No known markers found in that document.")
+                docFailed = true
+                logImport("Lab Book scan: 0 rows recognised (\(result.unrecognizedLineCount) unrecognised)")
+                return
+            }
+            docSummary = nil
+            pendingDocReview = result
+            logImport("Lab Book scan: \(result.rows.count) rows detected, awaiting review")
+        }
+    }
+
+    /// Save reviewed document-scan rows (LabDocumentReviewView already applied the user's
+    /// keep/drop choices and the confirmed date) the same way the CSV path does.
+    private func saveDocRows(_ rows: [LabMarkerRow]) async {
+        guard !rows.isEmpty, let store = await repo.storeHandle() else { return }
+        try? await store.upsertLabMarkers(rows)
+        await repo.refresh()
+        await load()
+        docSummary = rows.count == 1
+            ? String(localized: "Saved 1 reading from your scan.")
+            : String(localized: "Saved \(rows.count) readings from your scan.")
+        docFailed = false
+        logImport("Lab Book scan: saved \(rows.count) readings")
     }
 
     private func presentCsvImporter() {
@@ -477,6 +583,13 @@ struct LabBookView: View {
 // MARK: - Identifiable wrapper so a String marker key can drive `.sheet(item:)`
 
 private struct MarkerKeyID: Identifiable { let id: String }
+
+/// Wraps a `LabResultDocumentImport.Result` (not itself Identifiable) so it can drive
+/// `.sheet(item:)` for the mandatory scan-review sheet.
+private struct LabDocResultID: Identifiable {
+    let result: LabResultDocumentImport.Result
+    var id: Int { result.rows.count &+ (result.detectedDay?.hashValue ?? 0) &+ result.unrecognizedLineCount }
+}
 
 // MARK: - Category display names + ordering
 

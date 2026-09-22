@@ -74,16 +74,27 @@ private struct HealthSectionsStack: View {
             VitalitySection()
             // A visible seam: everything above this line uses a rolling 7-day window, everything below
             // (Lifetime Averages) uses your entire imported history — same formula, different window.
-            WeeklyToLifetimeDivider()
+            HealthGroupDivider("FULL HISTORY BELOW · SAME FORMULA")
             // Lifetime Fitness Age / Vitality: the SAME engines run over your ENTIRE imported history in
             // one pass, instead of the rolling 7-day window the sections above use. A separate, clearly
             // labeled category (never blended into the weekly headline) so "what does using ALL my data
             // say" is answerable without it silently overriding "what does THIS WEEK say".
             LifetimeSnapshotSection()
+            // A second seam: Baseline Age is a DIFFERENT methodology again — Baseline's own multi-domain
+            // composite, not the Nes/HUNT formula the two families above use.
+            HealthGroupDivider("IN-HOUSE COMPOSITE BELOW · A DIFFERENT FORMULA")
             // Baseline Age: the original in-house multi-domain composite (cardio + HRV + sleep +
             // training load + respiratory stability), transparently combined — Baseline's own answer to
             // WHOOP's undisclosed Healthspan number, with every contributing domain visible.
             BaselineAgeSection()
+            // A third seam: PhenoAge is neither of the above — a THIRD, separately-published formula
+            // that runs on a lab blood panel instead of wearable signals at all.
+            HealthGroupDivider("FROM YOUR LAB PANEL BELOW · A PUBLISHED CLINICAL FORMULA")
+            // PhenoAge (StrandAnalytics.PhenoAgeEngine): Levine et al. 2018's clinical-chemistry
+            // biological-age formula, computed the moment a full CBC + metabolic panel + CRP lands in
+            // the Lab Book (e.g. from a Superpower-style panel or the new document scan). A published,
+            // externally-validated formula — never blended with Baseline Age's own composite above.
+            PhenoAgeSection()
             // Training Load Balance (weekly Acute:Chronic Workload Ratio, StrandAnalytics
             // TrainingLoadEngine). Shown here UNCONDITIONALLY (not gated behind the opt-in "Your
             // cards" customiser) so a genuinely new metric isn't buried behind a discovery step —
@@ -1288,11 +1299,13 @@ private struct BaselineAgeSection: View {
 /// (FitnessAgeEngine/VitalityEngine) — the only difference is the time window they're computed over:
 /// the cards above use a rolling 7-day window, the cards below use your entire imported history in one
 /// pass. Placed once, right where the window changes, so it's obvious without reading every card.
-private struct WeeklyToLifetimeDivider: View {
+private struct HealthGroupDivider: View {
+    let label: String
+    init(_ label: String) { self.label = label }
     var body: some View {
         HStack(spacing: NoopMetrics.space3) {
             Rectangle().fill(StrandPalette.hairline).frame(height: 1)
-            Text("SAME FORMULA · FULL HISTORY BELOW")
+            Text(label)
                 .font(StrandFont.caption)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize()
@@ -1369,6 +1382,113 @@ private struct LifetimeSnapshotSection: View {
         fitnessAge = (await repo.exploreSeries(key: "fitness_age_lifetime", source: "my-whoop")).last?.value
         vitality = (await repo.exploreSeries(key: "vitality_lifetime", source: "my-whoop")).last?.value
         bodyAge = (await repo.exploreSeries(key: "body_age_lifetime", source: "my-whoop")).last?.value
+        loaded = true
+    }
+}
+
+// MARK: - PhenoAge (lab-panel biological age, Levine et al. 2018)
+
+/// Reads the LATEST value of each of PhenoAgeEngine's nine required markers from the Lab Book (whichever
+/// source they arrived from — manual entry, the markers CSV, or the new document scan) and, when a
+/// complete panel is present, computes the published Levine et al. 2018 "Phenotypic Age". A partial panel
+/// (e.g. a CBC with no CRP add-on) shows exactly which markers are still missing rather than a number
+/// computed a different way — this formula is not designed to degrade gracefully like Baseline Age is.
+private struct PhenoAgeSection: View {
+    @EnvironmentObject var repo: Repository
+    @EnvironmentObject var profile: ProfileStore
+    @State private var latest: [String: LabMarkerRow] = [:]
+    @State private var loaded = false
+
+    private static let requiredKeys = [
+        "albumin", "creatinine", "fasting_glucose", "crp", "lymphocyte_pct",
+        "mcv", "rdw", "alkaline_phosphatase", "wbc_count",
+    ]
+
+    private var result: PhenoAgeEngine.Result? {
+        func reading(_ key: String) -> PhenoAgeEngine.Reading? {
+            guard let row = latest[key], let v = row.value else { return nil }
+            return PhenoAgeEngine.Reading(value: v, unit: row.unit)
+        }
+        guard let albumin = reading("albumin"), let creatinine = reading("creatinine"),
+              let glucose = reading("fasting_glucose"), let crp = reading("crp"),
+              let lymph = reading("lymphocyte_pct"), let mcv = reading("mcv"),
+              let rdw = reading("rdw"), let alp = reading("alkaline_phosphatase"),
+              let wbc = reading("wbc_count"), profile.age > 0
+        else { return nil }
+        return PhenoAgeEngine.compute(.init(
+            chronoAge: Double(profile.age), albumin: albumin, creatinine: creatinine, glucose: glucose,
+            crp: crp, lymphocytePct: lymph, mcv: mcv, rdw: rdw, alkalinePhosphatase: alp, wbc: wbc))
+    }
+
+    private var missingLabels: [String] {
+        Self.requiredKeys.filter { latest[$0]?.value == nil }
+            .compactMap { MarkerCatalog.definition(for: $0)?.displayName }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("PhenoAge", overline: "From your lab panel",
+                          trailing: result != nil ? String(localized: "vs age \(profile.age)") : nil)
+            if let r = result {
+                hero(r)
+            } else if loaded {
+                ComingSoon(what: LocalizedStringKey(missingLabels.isEmpty
+                           ? "Add your age in Settings and we can show your PhenoAge."
+                           : "Needs the rest of a full blood panel: \(missingLabels.joined(separator: ", ")). Add them in Lab Book."),
+                           symbol: "cross.vial")
+            } else {
+                ComingSoon(what: "Reading your Lab Book…", symbol: "cross.vial")
+            }
+        }
+        .task(id: repo.refreshSeq) { await load() }
+    }
+
+    private func hero(_ r: PhenoAgeEngine.Result) -> some View {
+        let older = r.deltaYears >= 0
+        let yrs = Int(abs(r.deltaYears).rounded())
+        return VStack(alignment: .leading, spacing: NoopMetrics.space4) {
+            HStack(alignment: .firstTextBaseline, spacing: NoopMetrics.space5) {
+                VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                    Text("PhenoAge").strandOverline()
+                    CountUpText(value: r.phenoAge, format: { "\(Int($0.rounded()))" },
+                                font: StrandFont.number(38), color: StrandPalette.textPrimary)
+                }
+                Spacer(minLength: 0)
+                Text(deltaLine(yrs: yrs, older: older))
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(older ? StrandPalette.statusWarning : StrandPalette.statusPositive)
+            }
+            Divider().overlay(StrandPalette.hairline)
+            Text("Levine ME et al., \"An epigenetic biomarker of aging for lifespan and healthspan\", Aging (Albany NY) 2018 — the clinical-chemistry half of that paper (albumin, creatinine, glucose, CRP, and five CBC markers), not epigenetic. A published, externally-validated formula, reproduced exactly. Not a Baseline estimate, not medical advice.")
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+        }
+        .padding(NoopMetrics.space5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            FrostedCardSurface(tint: StrandPalette.metricCyan, cornerRadius: NoopMetrics.cardRadius)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+    }
+
+    private func deltaLine(yrs: Int, older: Bool) -> String {
+        if yrs == 0 { return String(localized: "about your age") }
+        switch (older, yrs == 1) {
+        case (true, true):   return String(localized: "1 yr older")
+        case (true, false):  return String(localized: "\(yrs) yrs older")
+        case (false, true):  return String(localized: "1 yr younger")
+        case (false, false): return String(localized: "\(yrs) yrs younger")
+        }
+    }
+
+    private func load() async {
+        guard let store = await repo.storeHandle() else { loaded = true; return }
+        let rows = (try? await store.labMarkers(deviceId: repo.deviceId, category: LabMarkerCategory.bloodPanel.rawValue)) ?? []
+        var byKey: [String: LabMarkerRow] = [:]
+        for row in rows where Self.requiredKeys.contains(row.markerKey) {
+            if let existing = byKey[row.markerKey], existing.takenAt >= row.takenAt { continue }
+            byKey[row.markerKey] = row
+        }
+        latest = byKey
         loaded = true
     }
 }

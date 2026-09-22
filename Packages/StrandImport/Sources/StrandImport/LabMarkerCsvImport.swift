@@ -302,6 +302,16 @@ public enum LabMarkerCsvImport {
             "body_weight": "weight", "bodyweight": "weight",
             "body_fat_pct": "body_fat", "body_fat_percentage": "body_fat",
             "waist_circumference": "waist",
+            // CBC + CMP additions (PhenoAgeEngine inputs), common report spellings.
+            "alb": "albumin", "serum_albumin": "albumin",
+            "lymphocytes": "lymphocyte_pct", "lymph": "lymphocyte_pct", "lymphs": "lymphocyte_pct",
+            "lymphocyte_percent": "lymphocyte_pct", "lymphs_pct": "lymphocyte_pct",
+            "mean_cell_volume": "mcv", "mean_corpuscular_volume": "mcv",
+            "rdw_cv": "rdw", "red_cell_distribution_width": "rdw", "rdw_sd": "rdw",
+            "alp": "alkaline_phosphatase", "alk_phos": "alkaline_phosphatase", "alkphos": "alkaline_phosphatase",
+            "wbc": "wbc_count", "white_blood_cells": "wbc_count", "white_blood_cell_count": "wbc_count",
+            "leukocytes": "wbc_count", "leucocytes": "wbc_count", "wbc_c": "wbc_count",
+            "insulin": "fasting_insulin", "fasting_insulin_level": "fasting_insulin",
         ]
         for (k, v) in extras { t[k] = v }
         return t

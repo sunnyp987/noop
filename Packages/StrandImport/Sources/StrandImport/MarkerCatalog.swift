@@ -79,6 +79,9 @@ public enum MarkerCatalog {
         // Glucose
         .init(key: "fasting_glucose", displayName: "Fasting glucose", category: .bloodPanel, canonicalUnit: "mmol/L", decimals: 1, referenceTextHint: fromReport),
         .init(key: "hba1c", displayName: "HbA1c", category: .bloodPanel, canonicalUnit: "mmol/mol", decimals: 0, referenceTextHint: fromReport),
+        // Not in every panel (e.g. missing from a first Superpower run) but common enough on a
+        // follow-up metabolic panel to be worth a slot of its own rather than falling to a custom marker.
+        .init(key: "fasting_insulin", displayName: "Fasting insulin", category: .bloodPanel, canonicalUnit: "µIU/mL", decimals: 1, referenceTextHint: fromReport),
         // Iron studies
         .init(key: "ferritin", displayName: "Ferritin", category: .bloodPanel, canonicalUnit: "µg/L", decimals: 0, referenceTextHint: fromReport),
         .init(key: "iron", displayName: "Serum iron", category: .bloodPanel, canonicalUnit: "µmol/L", decimals: 1, referenceTextHint: fromReport),
@@ -103,6 +106,16 @@ public enum MarkerCatalog {
         // Electrolytes
         .init(key: "sodium", displayName: "Sodium", category: .bloodPanel, canonicalUnit: "mmol/L", decimals: 0, referenceTextHint: fromReport),
         .init(key: "potassium", displayName: "Potassium", category: .bloodPanel, canonicalUnit: "mmol/L", decimals: 1, referenceTextHint: fromReport),
+        // Protein + CBC panel (added so a full blood-panel export — e.g. Superpower, or any
+        // CBC + CMP + hs-CRP panel — can feed StrandAnalytics.PhenoAgeEngine, the published
+        // Levine et al. 2018 clinical-chemistry biological-age formula; canonicalUnit here is
+        // the unit THAT FORMULA expects, PhenoAgeEngine normalises common alternate units).
+        .init(key: "albumin", displayName: "Albumin", category: .bloodPanel, canonicalUnit: "g/L", decimals: 0, referenceTextHint: fromReport),
+        .init(key: "lymphocyte_pct", displayName: "Lymphocyte %", category: .bloodPanel, canonicalUnit: "%", decimals: 1, referenceTextHint: fromReport),
+        .init(key: "mcv", displayName: "MCV (mean cell volume)", category: .bloodPanel, canonicalUnit: "fL", decimals: 1, referenceTextHint: fromReport),
+        .init(key: "rdw", displayName: "RDW (red cell distribution width)", category: .bloodPanel, canonicalUnit: "%", decimals: 1, referenceTextHint: fromReport),
+        .init(key: "alkaline_phosphatase", displayName: "Alkaline phosphatase (ALP)", category: .bloodPanel, canonicalUnit: "U/L", decimals: 0, referenceTextHint: fromReport),
+        .init(key: "wbc_count", displayName: "White blood cell count (WBC)", category: .bloodPanel, canonicalUnit: "10^9/L", decimals: 1, referenceTextHint: fromReport),
         // Blood pressure (the paired marker — see LabBookProjection.bpSystolicKey/bpDiastolicKey)
         .init(key: "bp_systolic", displayName: "Blood pressure (systolic)", category: .bloodPressure, canonicalUnit: "mmHg", decimals: 0, referenceTextHint: fromReport),
         .init(key: "bp_diastolic", displayName: "Blood pressure (diastolic)", category: .bloodPressure, canonicalUnit: "mmHg", decimals: 0, referenceTextHint: fromReport),
