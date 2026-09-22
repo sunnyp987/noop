@@ -1438,15 +1438,40 @@ private struct PhenoAgeSection: View {
             if let r = result {
                 hero(r)
             } else if loaded {
-                ComingSoon(what: LocalizedStringKey(missingLabels.isEmpty
+                ComingSoon(what: LocalizedStringKey(!missingLabels.isEmpty
+                           ? "Needs the rest of a full blood panel: \(missingLabels.joined(separator: ", ")). Add them in Lab Book."
+                           : profile.age <= 0
                            ? "Add your age in Settings and we can show your PhenoAge."
-                           : "Needs the rest of a full blood panel: \(missingLabels.joined(separator: ", ")). Add them in Lab Book."),
+                           : "One of your values looks out of range for this formula \u{2014} double-check your Lab Book entries against the report for a mis-scanned number or unit."),
                            symbol: "cross.vial")
+                if loaded, result == nil, missingLabels.isEmpty, profile.age > 0 {
+                    outOfRangeDiagnostics
+                }
             } else {
                 ComingSoon(what: "Reading your Lab Book…", symbol: "cross.vial")
             }
         }
         .task(id: repo.refreshSeq) { await load() }
+    }
+
+    /// Shown only when all nine markers are present but the formula still rejected them — lists the raw
+    /// stored value/unit for each so the user can spot the one a document scan misread (a stray digit or
+    /// a swapped unit) without having to dig through the Lab Book row by row.
+    private var outOfRangeDiagnostics: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+            ForEach(Self.requiredKeys, id: \.self) { key in
+                if let row = latest[key], let v = row.value {
+                    HStack {
+                        Text(MarkerCatalog.definition(for: key)?.displayName ?? key)
+                            .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
+                        Spacer()
+                        Text("\(v.formatted()) \(row.unit ?? "")")
+                            .font(StrandFont.footnote.weight(.medium)).foregroundStyle(StrandPalette.textPrimary)
+                    }
+                }
+            }
+        }
+        .padding(.top, NoopMetrics.space2)
     }
 
     private func hero(_ r: PhenoAgeEngine.Result) -> some View {
