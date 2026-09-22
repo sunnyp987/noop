@@ -486,11 +486,14 @@ struct LabBookView: View {
         return keys.sorted { displayName(for: $0) < displayName(for: $1) }
     }
 
-    /// One marker as a tappable card: name, latest reading + unit, a tiny sparkline, last-taken date.
+    /// One marker as a tappable card: name, latest reading + unit, a tiny sparkline, last-taken date,
+    /// and — once there's enough history — a status pill comparing the latest reading to the user's
+    /// OWN prior readings for this marker (never a shipped clinical range; see LabMarkerBaselineEngine).
     private func markerRow(_ key: String) -> some View {
         let series = readings(for: key)
         let numeric = series.compactMap { $0.value }
         let latest = series.last
+        let baseline = LabMarkerBaselineEngine.evaluate(history: numeric)
         return Button {
             detailKey = key
         } label: {
@@ -501,9 +504,14 @@ struct LabBookView: View {
                             .font(StrandFont.headline)
                             .foregroundStyle(StrandPalette.textPrimary)
                             .lineLimit(1)
-                        Text(lastTakenCaption(latest))
-                            .font(StrandFont.footnote)
-                            .foregroundStyle(StrandPalette.textTertiary)
+                        HStack(spacing: 6) {
+                            Text(lastTakenCaption(latest))
+                                .font(StrandFont.footnote)
+                                .foregroundStyle(StrandPalette.textTertiary)
+                            if let baseline {
+                                StatePill(Self.baselineLabel(baseline.status), tone: Self.baselineTone(baseline.status), showsDot: false)
+                            }
+                        }
                     }
                     Spacer(minLength: 8)
                     if numeric.count > 1 {
@@ -527,7 +535,38 @@ struct LabBookView: View {
         // opening a marker's detail feels physical (replaces the flat .plain style).
         .buttonStyle(LiquidPressStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(displayName(for: key)), latest \(latestLabel(latest, key: key)), \(series.count) readings")
+        .accessibilityLabel("\(displayName(for: key)), latest \(latestLabel(latest, key: key)), \(series.count) readings\(baseline.map { ", " + Self.baselineAXPhrase($0.status) } ?? "")")
+    }
+
+    /// Short pill text for a personal-baseline status — compares the latest reading to the user's
+    /// OWN prior readings, never a clinical judgement. "Typical for you" intentionally echoes the
+    /// app's name/framing rather than borrowing "Normal"/"Optimal" language from a lab report.
+    fileprivate static func baselineLabel(_ status: LabMarkerBaselineEngine.Status) -> LocalizedStringKey {
+        switch status {
+        case .muchLower:  return "Much lower than usual"
+        case .lower:      return "Lower than usual"
+        case .typical:    return "Typical for you"
+        case .higher:     return "Higher than usual"
+        case .muchHigher: return "Much higher than usual"
+        }
+    }
+
+    fileprivate static func baselineTone(_ status: LabMarkerBaselineEngine.Status) -> StrandTone {
+        switch status {
+        case .muchLower, .muchHigher: return .critical
+        case .lower, .higher:         return .warning
+        case .typical:                return .positive
+        }
+    }
+
+    private static func baselineAXPhrase(_ status: LabMarkerBaselineEngine.Status) -> String {
+        switch status {
+        case .muchLower:  return String(localized: "much lower than your usual")
+        case .lower:      return String(localized: "lower than your usual")
+        case .typical:    return String(localized: "typical for you")
+        case .higher:     return String(localized: "higher than your usual")
+        case .muchHigher: return String(localized: "much higher than your usual")
+        }
     }
 
     // MARK: - Disclaimer (always visible footnote + link)
@@ -781,6 +820,20 @@ private struct MarkerDetailView: View {
                         .font(StrandFont.subhead)
                         .foregroundStyle(StrandPalette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let baseline = LabMarkerBaselineEngine.evaluate(history: numericReadings.compactMap { $0.value }) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Vs. your own history")
+                                    .font(StrandFont.footnote)
+                                    .foregroundStyle(StrandPalette.textTertiary)
+                                Spacer()
+                                StatePill(LabBookView.baselineLabel(baseline.status), tone: LabBookView.baselineTone(baseline.status), showsDot: false)
+                            }
+                            TypicalRangeBar(value: baseline.valueFraction, typical: baseline.typicalFraction,
+                                             color: LabBookView.baselineTone(baseline.status).color, height: 10)
+                        }
+                        .padding(.top, 2)
+                    }
                     if let ref = latestReferenceText {
                         HStack(spacing: 6) {
                             SourceBadge("from your report", tint: StrandPalette.textTertiary)
