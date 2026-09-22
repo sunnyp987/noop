@@ -545,6 +545,10 @@ struct LiquidTodayView: View {
             // A tap-through to the full Coupled day screen. No value.
             cardLink(dest: CoupledView(), title: card.title, sub: card.subtitle,
                      value: "", tint: StrandPalette.chargeColor, frac: 0.6)
+        case .intervals:
+            // A tap-through shortcut straight to the Interval Timer. No value.
+            cardLink(dest: IntervalTimerView(), title: card.title, sub: card.subtitle,
+                     value: "", tint: StrandPalette.effortColor, frac: 0.6)
         }
     }
 

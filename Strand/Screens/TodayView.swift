@@ -2348,6 +2348,11 @@ struct TodayView: View {
             // coupled day screen. An empty value renders just the icon + title + subtitle + chevron.
             pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
                           value: dashboardValue(card)) { CoupledView() }
+        case .intervals:
+            // A tap-through shortcut to the Interval Timer — no metric value of its own, same treatment
+            // as the Coupled view row above.
+            pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
+                          value: dashboardValue(card)) { IntervalTimerView() }
         }
     }
 
@@ -2370,6 +2375,7 @@ struct TodayView: View {
         case .calories:    return StrandPalette.metricAmber
         case .hydration:   return StrandPalette.metricCyan
         case .coupled:     return StrandPalette.chargeColor
+        case .intervals:   return StrandPalette.effortColor
         }
     }
 
@@ -2440,6 +2446,8 @@ struct TodayView: View {
         case .coupled:
             // A tap-through row with no metric value of its own, the row shows just the chevron. Returning
             // an empty string (not "—") renders no number and leaves it un-dimmed (it isn't a missing value).
+            return ""
+        case .intervals:
             return ""
         }
     }

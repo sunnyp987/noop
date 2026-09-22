@@ -45,6 +45,10 @@ enum DashboardCard: String, CaseIterable, Identifiable {
     /// CoupledView screen. It is NOT in `defaultSelection`, so a fresh install never shows it until the user
     /// adds it via CUSTOMISE, matching the manual-first / default-OFF posture.
     case coupled
+    /// Optional, default-OFF: a tap-through shortcut straight to the Interval Timer, for anyone who runs
+    /// intervals often and would rather tap one dashboard row than dig through the tab bar. Like `.coupled`
+    /// this carries NO metric value of its own — a pure navigation row — so it is NOT in `defaultSelection`.
+    case intervals
 
     var id: String { rawValue }
 
@@ -68,6 +72,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .calories:    return String(localized: "Calories")
         case .hydration:   return String(localized: "Hydration")
         case .coupled:     return String(localized: "Coupled view")
+        case .intervals:   return String(localized: "Intervals")
         }
     }
 
@@ -90,6 +95,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .calories:    return String(localized: "Active energy")
         case .hydration:   return String(localized: "Today's fluid")
         case .coupled:     return String(localized: "Recovery, strain and sleep in one glance")
+        case .intervals:   return String(localized: "Jump straight to the timer")
         }
     }
 
@@ -111,6 +117,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .calories:    return "flame.fill"
         case .hydration:   return "drop.fill"
         case .coupled:     return "circle.hexagongrid.fill"
+        case .intervals:   return "timer"
         }
     }
 
@@ -132,6 +139,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .calories:    return "kcal"
         case .hydration:   return ""    // value bakes in "<total> / <goal> L" itself
         case .coupled:     return ""    // a tap-through row, no value, so no unit
+        case .intervals:   return ""    // a tap-through row, no value, so no unit
         }
     }
 

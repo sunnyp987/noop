@@ -7,7 +7,7 @@ enum AppChangelog {
 
     /// Bump this when you add a release below. The "What's New" sheet shows automatically when the
     /// stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
-    static let currentVersion = "7.9.0"
+    static let currentVersion = "7.10.0"
 
     struct Release: Identifiable {
         let version: String
@@ -19,6 +19,21 @@ enum AppChangelog {
 
     /// Newest first.
     static let releases: [Release] = [
+        Release(
+            version: "7.10.0",
+            title: "Baseline Age, Training Load, and an interval-timer shortcut",
+            date: "September 2026",
+            items: [
+                "**New: Baseline Age, an original in-house biological-age score.** Health → Baseline Age combines five signals — cardio fitness, HRV, sleep amount, sleep regularity and training load — each capped individually so no single bad week can pin the result to a floor or ceiling, then blended into one number. It is clearly labelled \"In-house · Experimental\": some of it (the cardio and HRV pieces) reuses published research, some (the exact sleep-hours weighting) is Baseline's own judgement call, stated plainly rather than dressed up as more validated than it is. Not a medical or clinical estimate.",
+                "**New: Sleep Regularity, feeding that score honestly.** Rather than inventing a consistency measure, Baseline now computes the real Sleep Regularity Index from a 2017 sleep-science paper (Phillips et al., *Scientific Reports*) — how similar your bed/wake clock-times are night to night — and a 2023 UK Biobank study (Windred et al., *eLife*) linking irregular sleep to higher mortality risk independent of how much you actually slept. Needs at least 4 consecutive nights logged to compute; shows nowhere on its own but you'll see it named in Baseline Age's breakdown.",
+                "**New: Training Load Balance, a real sports-science signal, always visible on Health now.** Compares this week's training to your last month's average using the Acute:Chronic Workload Ratio (Gabbett 2016), a published measure several studies link to injury risk when training ramps up too fast for the body to adapt. It was already possible to add as an opt-in card; it's now an unconditional Health-screen section so it's not something you have to know to go looking for, and you can still add it as a Your-cards shortcut too.",
+                "**New: Lifetime Averages, a separate all-time comparison point.** Health → Lifetime Averages runs the same Fitness Age and Vitality math over your ENTIRE imported history in one pass, not just the current week. It's deliberately never blended into your weekly numbers — mixing a year ago with now would misrepresent both — so it's shown as its own clearly-dated card instead.",
+                "**New: Heart-Rate Recovery (HRR60), a first use of data the app already recorded but never scored.** After a workout of 3+ minutes, Baseline now reads how many beats per minute your heart rate drops in the first 60 seconds afterward — grounded in Cole et al., *New England Journal of Medicine* 1999, which found a bigger post-exercise HR drop predicts better cardiovascular health. Baseline deliberately does not import that paper's specific mortality cutoff (it was validated on a standardized treadmill test, not a free workout), so this is shown directionally as Strong / Typical / Sluggish recovery, not a diagnostic score. Find it under Trends → HR Recovery.",
+                "**Fixed: naps were being silently thrown away on WHOOP import.** Every nap you took was being read from your export and then discarded before it ever reached the app. Naps are now kept as their own sleep sessions (your real overnight sleep still always wins as the \"main\" sleep for the day, unchanged).",
+                "**Fixed: Fitness Age and Vitality could get stuck \"still coming together\" forever, even after a fix landed.** A one-time backfill only ever runs once per install; if it had already (incorrectly) marked itself done on an older build, no later bugfix could make it re-run on that same install. It's been reset to run cleanly one more time.",
+                "**New: an Interval Timer shortcut for Your Cards.** If you run intervals often, add \"Intervals\" as a dashboard card (Customise → Your Cards) for a one-tap shortcut straight to the Interval Timer, instead of finding it in the tab bar every time.",
+                "**Restored: the actual gold in \"Titanium & Gold\".** The app's accent colour, focus rings and highlighted rows had quietly been repointed to WHOOP's blue in an earlier build, while everything still called the theme \"Titanium & Gold\" — so the promised look never showed up in daily use even though the app icon had it. The real gold/bronze tones are back across the app.",
+            ]),
         Release(
             version: "7.9.0",
             title: "Coupled view, workouts rebuilt, journal numbers",
