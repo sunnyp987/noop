@@ -252,6 +252,10 @@ struct TodayView: View {
     @State private var stressToday: Double?
     @State private var fitnessAgeToday: Double?
     @State private var vitalityToday: Double?
+    /// VO2max estimate (mL/kg/min, same unit WHOOP's app uses), read from the SAME "vo2max_est" computed
+    /// series the Health screen's Fitness Age section already reads , no new computation, just a second
+    /// place to see it.
+    @State private var vo2maxToday: Double?
     /// Distinct days + sleep sessions imported from a Mi Band (Mi Fitness), for the Data Sources row.
     @State private var xiaomiDays = 0
     @State private var xiaomiSleeps = 0
@@ -2308,6 +2312,11 @@ struct TodayView: View {
         case .vitality:
             pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
                           value: dashboardValue(card)) { HealthView() }
+        case .vo2max:
+            // Same detail destination as Fitness Age/Vitality: the Health screen's Fitness Age section
+            // already shows VO2max in the same mL/kg/min unit, so this card is a second way to see it.
+            pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
+                          value: dashboardValue(card)) { HealthView() }
         case .hrv, .restingHr, .respiratory, .bloodOxygen, .skinTemp:
             // The overnight vitals share the Health detail screen (the vital-signs surface).
             pinnedCardRow(icon: card.icon, tint: tint, title: card.title, subtitle: card.subtitle,
@@ -2339,6 +2348,7 @@ struct TodayView: View {
         case .stress:      return StrandPalette.effortColor
         case .fitnessAge:  return StrandPalette.chargeColor
         case .vitality:    return StrandPalette.restColor
+        case .vo2max:      return StrandPalette.metricPurple
         case .hrv:         return StrandPalette.metricPurple
         case .restingHr:   return StrandPalette.metricRose
         case .respiratory: return StrandPalette.accent
@@ -2407,6 +2417,8 @@ struct TodayView: View {
             return withUnit(fitnessAgeToday.map { "\(Int($0.rounded()))" } ?? "—")
         case .vitality:
             return vitalityToday.map { "\(Int($0.rounded()))" } ?? "—"
+        case .vo2max:
+            return withUnit(vo2maxToday.map { String(format: "%.0f", $0) } ?? "—")
         case .hydration:
             // "<total> / <goal> L" in litres to 1 dp (the string bakes in the " L" itself). Always shows a
             // value (a fresh day reads "0.0 / 3.2 L"); the goal is always derivable from the profile.
@@ -2835,55 +2847,44 @@ struct TodayView: View {
         onRingTap: (() -> Void)? = nil,
         @ViewBuilder ring: () -> RingBody
     ) -> some View {
-        VStack(spacing: 8) {
-            // A1: when the column is tappable (Charge), wrap the ring in a button (the body is just the ring
-            // with a contentShape so the whole disc is hittable). The tappable ring carries NO in-ring cue:
-            // the single affordance is the label chevron below it (see the comment near the Button below).
-            // The non-tappable rings render unchanged.
-            if let onRingTap {
-                Button(action: onRingTap) {
-                    ring().contentShape(Rectangle())
+        // Single tap target for the whole column (ring + label together), not two overlapping Buttons
+        // stacked in a VStack (a ring Button plus a separate chevron/label Button right beneath it,
+        // both calling the same action). Two nested/adjacent Buttons doing the same thing inside a
+        // ScrollView is a known source of SwiftUI hit-testing ambiguity — reported as "feels like a tap
+        // registered (haptic) but nothing opens." One Button around the whole column removes that
+        // ambiguity outright, regardless of the exact cause.
+        let action: () -> Void = onRingTap ?? { guideSection = section }
+        return VStack(spacing: 8) {
+            Button(action: action) {
+                VStack(spacing: 8) {
+                    ring()
+                    HStack(spacing: 3) {
+                        // #937: an invisible LEADING twin of the trailing chevron. The word + chevron used to
+                        // centre as ONE block, which pushed the word visibly off the ring's axis (worst on short
+                        // labels like REST). Balancing the row with a same-sized clear chevron re-centres the
+                        // WORD itself under the ring while the real chevron stays visible on the trailing side.
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .opacity(0)
+                            .accessibilityHidden(true)
+                        // The CHARGE/EFFORT/REST hero label is localized: the catalog key is the natural-case
+                        // domain word (Charge/Effort/Rest) and `.textCase(.uppercase)` does the uppercasing in
+                        // the current locale, so a de/es/ru build shows the translated word, not the English id.
+                        Text(Self.domainLabel(domain))
+                            .textCase(.uppercase)
+                            .font(StrandFont.overline)
+                            .tracking(StrandFont.overlineTracking)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .opacity(0.6)
+                    }
+                    .foregroundStyle(StrandPalette.textSecondary)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Self.domainLabel(domain))
-                .accessibilityHint("See what shaped your Charge")
-                .accessibilityAddTraits(.isButton)
-            } else {
-                ring()
-            }
-            // ONE chevron affordance under every ring, so the row reads uniformly (no second cue on the
-            // Charge ring). Charge's chevron opens the "what shaped it" breakdown (its richest explanation);
-            // Effort / Rest open their scoring-guide section.
-            Button { if let onRingTap { onRingTap() } else { guideSection = section } } label: {
-                HStack(spacing: 3) {
-                    // #937: an invisible LEADING twin of the trailing chevron. The word + chevron used to
-                    // centre as ONE block, which pushed the word visibly off the ring's axis (worst on short
-                    // labels like REST). Balancing the row with a same-sized clear chevron re-centres the
-                    // WORD itself under the ring while the real chevron stays visible on the trailing side.
-                    // opacity(0) keeps its layout slot (a conditional would remove it), and the HStack stays
-                    // plain leading-to-trailing content with no alignment-guide math, so LTR and RTL mirror
-                    // identically. Hidden from VoiceOver: it is a spacer, not content.
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .opacity(0)
-                        .accessibilityHidden(true)
-                    // The CHARGE/EFFORT/REST hero label is localized: the catalog key is the natural-case
-                    // domain word (Charge/Effort/Rest) and `.textCase(.uppercase)` does the uppercasing in
-                    // the current locale, so a de/es/ru build shows the translated word, not the English id.
-                    Text(Self.domainLabel(domain))
-                        .textCase(.uppercase)
-                        .font(StrandFont.overline)
-                        .tracking(StrandFont.overlineTracking)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .opacity(0.6)
-                }
-                .foregroundStyle(StrandPalette.textSecondary)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(onRingTap == nil ? Self.domainGuideAccessibilityLabel(domain)
-                                                  : "See what shaped your Charge")
+            .accessibilityLabel(onRingTap != nil ? Self.domainLabel(domain) : Self.domainGuideAccessibilityLabel(domain))
+            .accessibilityHint(onRingTap != nil ? "See what shaped your \(Self.domainLabel(domain))" : "")
             // Component 4, the real per-day source under the ring (only when this score has a value for
             // the day AND we resolved its winner; a calibrating / empty ring shows no provenance badge).
             // Apple Watch (M1): a watch-sourced score reads "Apple Watch" with its confidence bound to the
@@ -3938,6 +3939,7 @@ struct TodayView: View {
         async let stressStoredA      = repo.series(key: "stress", source: "my-whoop")
         async let fitnessAgeSeriesA  = repo.exploreSeries(key: "fitness_age", source: "my-whoop")
         async let vitalitySeriesA    = repo.exploreSeries(key: "vitality", source: "my-whoop")
+        async let vo2maxSeriesA      = repo.exploreSeries(key: "vo2max_est", source: "my-whoop")
 
         // Steps ESTIMATE per day (WHOOP 4.0 motion → calibrated steps). exploreSeries reads the computed
         // "-noop" metricSeries the IntelligenceEngine writes, exactly like the Explore "steps_est" metric.
@@ -3961,6 +3963,7 @@ struct TodayView: View {
         stressToday = StressModel(days: repo.days, stored: await stressStoredA)?.score
         fitnessAgeToday = (await fitnessAgeSeriesA).last?.value
         vitalityToday = (await vitalitySeriesA).last?.value
+        vo2maxToday = (await vo2maxSeriesA).last?.value
         // Hydration card (opt-in): today's stored total + the sex/Effort goal. Only loaded when the
         // feature is on, so a disabled feature does zero work and the card stays hidden.
         await reloadHydration()
@@ -3986,7 +3989,8 @@ struct TodayView: View {
             xiaomiSleeps: xiaomiSleeps,
             stressToday: stressToday,
             fitnessAgeToday: fitnessAgeToday,
-            vitalityToday: vitalityToday
+            vitalityToday: vitalityToday,
+            vo2maxToday: vo2maxToday
         )
     }
 
@@ -4005,6 +4009,7 @@ struct TodayView: View {
         stressToday = c.stressToday
         fitnessAgeToday = c.fitnessAgeToday
         vitalityToday = c.vitalityToday
+        vo2maxToday = c.vo2maxToday
         // Hydration is deliberately NOT part of the snapshot (#989): logging a drink never bumps
         // refreshSeq, so a restored total could be stale. It is re-read live instead (see loadAll).
     }
@@ -4540,6 +4545,7 @@ struct TodayHistoryWideCache {
     let stressToday: Double?
     let fitnessAgeToday: Double?
     let vitalityToday: Double?
+    let vo2maxToday: Double?
     // Hydration total/goal intentionally absent (#989): mutations don't bump refreshSeq, so a cached
     // value could restore stale. TodayView re-reads hydration live on restore instead.
 }

@@ -25,6 +25,11 @@ enum DashboardCard: String, CaseIterable, Identifiable {
     case stress
     case fitnessAge
     case vitality
+    /// VO2max estimate (Nes/HUNT model, StrandAnalytics FitnessAgeEngine), in mL/kg/min — the SAME unit
+    /// WHOOP's own app reports, so a number from either app reads on the same scale. Already computed
+    /// (as "vo2max_est") and shown on the Health screen's Fitness Age section; this surfaces it as its
+    /// own dashboard card too, since it wasn't obviously discoverable there.
+    case vo2max
     case bloodOxygen
     case skinTemp
     case sleep
@@ -50,6 +55,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .stress:      return String(localized: "Stress")
         case .fitnessAge:  return String(localized: "Fitness Age")
         case .vitality:    return String(localized: "Vitality")
+        case .vo2max:      return String(localized: "VO2 Max")
         case .bloodOxygen: return String(localized: "Blood Oxygen")
         case .skinTemp:    return String(localized: "Skin Temp")
         case .sleep:       return String(localized: "Sleep")
@@ -70,6 +76,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .stress:      return String(localized: "Autonomic load")
         case .fitnessAge:  return String(localized: "Updated weekly")
         case .vitality:    return String(localized: "Wellness score")
+        case .vo2max:      return String(localized: "Estimated aerobic fitness")
         case .bloodOxygen: return String(localized: "Blood oxygen")
         case .skinTemp:    return String(localized: "Skin temperature")
         case .sleep:       return String(localized: "Last night")
@@ -89,6 +96,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .stress:      return "bolt.heart"
         case .fitnessAge:  return "figure.run"
         case .vitality:    return "sparkles"
+        case .vo2max:      return "lungs.fill"
         case .bloodOxygen: return "drop.fill"
         case .skinTemp:    return "thermometer.medium"
         case .sleep:       return "bed.double.fill"
@@ -108,6 +116,7 @@ enum DashboardCard: String, CaseIterable, Identifiable {
         case .stress:      return ""
         case .fitnessAge:  return "yrs"
         case .vitality:    return ""
+        case .vo2max:      return "mL/kg/min"
         case .bloodOxygen: return ""    // value carries the % itself
         case .skinTemp:    return ""    // value carries the ° itself
         case .sleep:       return ""    // value carries the h/m itself
