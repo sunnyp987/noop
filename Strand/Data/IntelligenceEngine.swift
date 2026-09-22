@@ -1158,14 +1158,91 @@ final class IntelligenceEngine: ObservableObject {
         // backfill), keyed to the pool's own most recent day, same honesty-about-which-day convention as
         // the Fitness Age fold above.
         let loadSeries = faVitalityPool.sorted { $0.day < $1.day }
+        var trainingLoadRatioForBioAge: Double?
         if let loadResult = TrainingLoadEngine.compute(dailyStrain: loadSeries.map { $0.strain }),
            let loadAnchor = loadSeries.last?.day {
             let loadSatDay = loadAnchor   // daily, not weekly — persisted under its own real day
+            trainingLoadRatioForBioAge = loadResult.ratio
             _ = try? await store.upsertMetricSeries([
                 MetricPoint(day: loadSatDay, key: "training_load_ratio", value: loadResult.ratio),
                 MetricPoint(day: loadSatDay, key: "training_load_acute", value: loadResult.acute),
                 MetricPoint(day: loadSatDay, key: "training_load_chronic", value: loadResult.chronic),
             ], deviceId: computedId)
+        }
+
+        // ── Baseline Age (in-house, original) ────────────────────────────────────────────────────────
+        // A multi-domain composite BiometricAgeEngine builds from THIS week's cardiorespiratory (RHR +
+        // activity), autonomic (HRV vs age-normative curve), sleep (duration + regularity), training-load
+        // balance, and respiratory-stability signals — see BiometricAgeEngine.swift's header for why this
+        // exists (transparent domains + a saturating combination, vs a single linear formula that can hit
+        // its floor from one extreme input, and vs WHOOP's own undisclosed Healthspan formula). Reuses
+        // `fa7`/`faRHRs`-equivalent aggregation freshly here (this function doesn't have those locals in
+        // scope), recomputed every pass alongside the weekly Fitness Age/Vitality above.
+        do {
+            let bioRHRs = fa7.compactMap { $0.restingHr }.map(Double.init)
+            let bioActiveStrains = fa7.compactMap { $0.strain }.filter { $0 >= 30 }
+            let bioMeanActiveStrain = bioActiveStrains.isEmpty ? 0
+                : bioActiveStrains.reduce(0, +) / Double(bioActiveStrains.count)
+            let bioPAI = FitnessAgeEngine.physicalActivityIndexFromStrain(
+                activeDaysPerWeek: bioActiveStrains.count, meanActiveStrain: bioMeanActiveStrain)
+            let bioNights = fa7.compactMap { $0.totalSleepMin }.map { Double($0) / 60.0 }.filter { $0 > 0 }
+            let bioHRVs = fa7.compactMap { $0.avgHrv }
+            let bioResps = fa7.compactMap { $0.respRateBpm }
+            let bioRespCV: Double? = {
+                guard bioResps.count >= 3 else { return nil }
+                let mean = bioResps.reduce(0, +) / Double(bioResps.count)
+                guard mean > 0 else { return nil }
+                let variance = bioResps.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(bioResps.count)
+                return variance.squareRoot() / mean
+            }()
+            // Real Sleep Regularity Index (Phillips 2017, see SleepRegularityEngine) over DAY-CONSECUTIVE
+            // runs of `mainSessionByDay` — a gap night (missed sleep session) breaks a run rather than
+            // silently pairing two unrelated nights across it. Runs are combined as a pair-count-weighted
+            // average, since a longer contiguous run is a more reliable read than a short one.
+            let bioSriPercent: Double? = {
+                let sortedDays = mainSessionByDay.keys.sorted()
+                guard !sortedDays.isEmpty else { return nil }
+                var runs: [[SleepRegularityEngine.NightWindow]] = [[]]
+                var prevDate: Date?
+                for day in sortedDays {
+                    guard let sess = mainSessionByDay[day], let curDate = Repository.date(fromDay: day) else { continue }
+                    let window = SleepRegularityEngine.NightWindow(
+                        bedLocalSec: localTimeOfDaySeconds(sess.startTs), wakeLocalSec: localTimeOfDaySeconds(sess.endTs))
+                    if let pd = prevDate, Calendar.current.dateComponents([.day], from: pd, to: curDate).day != 1 {
+                        runs.append([])
+                    }
+                    runs[runs.count - 1].append(window)
+                    prevDate = curDate
+                }
+                var weightedSum = 0.0, totalPairs = 0.0
+                for run in runs {
+                    guard run.count >= SleepRegularityEngine.minPairs + 1,
+                          let sriValue = SleepRegularityEngine.sri(nights: run) else { continue }
+                    let pairs = Double(run.count - 1)
+                    weightedSum += sriValue * pairs
+                    totalPairs += pairs
+                }
+                guard totalPairs > 0 else { return nil }
+                return weightedSum / totalPairs
+            }()
+            let bioInputs = BiometricAgeEngine.Inputs(
+                chronoAge: Double(profile.age), sex: profile.sex,
+                restingHR: bioRHRs.isEmpty ? nil : IntelligenceEngine.medianOf(bioRHRs),
+                paIndex: bioPAI,
+                rmssd: bioHRVs.isEmpty ? nil : IntelligenceEngine.medianOf(bioHRVs),
+                sleepHours: bioNights.isEmpty ? nil : bioNights.reduce(0, +) / Double(bioNights.count),
+                sleepNeedHours: personalSleepNeedHours,
+                sleepConsistency: VitalityEngine.bedWakeRegularity(bedTimesLocalSec: bedTimesLocalSec, wakeTimesLocalSec: wakeTimesLocalSec)
+                    ?? VitalityEngine.sleepConsistency(nightlyHours: bioNights),
+                sriPercent: bioSriPercent,
+                trainingLoadRatio: trainingLoadRatioForBioAge,
+                respRateCV: bioRespCV)
+            if let bioRes = BiometricAgeEngine.compute(bioInputs) {
+                let bioSatKey = IntelligenceEngine.saturdayKey(onOrBefore: faVitalityWeekAnchor)
+                _ = try? await store.upsertMetricSeries([
+                    MetricPoint(day: bioSatKey, key: "biometric_age", value: bioRes.biometricAge),
+                ], deviceId: computedId)
+            }
         }
 
         // ── Steps ESTIMATE (WHOOP 4.0) , DAILY, keyed to each strap-only day ────────────────────────

@@ -96,6 +96,23 @@ public enum VitalityEngine {
         return anchors[anchors.count - 1].1
     }
 
+    /// Inverse of `rmssdNorm`: given a measured RMSSD, what age does that value sit at on the SAME
+    /// piecewise-linear population curve? (RMSSD declines with age, so this is a monotonic decreasing
+    /// lookup — walk the anchors from oldest to youngest and find the bracket the value falls in.) Used
+    /// by BiometricAgeEngine as the autonomic-nervous-system domain: "your HRV reads like a person of age
+    /// N", entirely reusing this file's own reference curve rather than inventing separate coefficients.
+    public static func ageImpliedByRMSSD(_ rmssd: Double) -> Double {
+        let anchors: [(Double, Double)] = [(20, 47), (30, 40), (40, 33), (50, 29), (60, 25), (70, 22), (80, 20)]
+        if rmssd >= anchors[0].1 { return anchors[0].0 }
+        if rmssd <= anchors[anchors.count - 1].1 { return anchors[anchors.count - 1].0 }
+        for i in 1..<anchors.count where rmssd >= anchors[i].1 {
+            let (a0, v0) = anchors[i - 1]; let (a1, v1) = anchors[i]
+            guard v1 != v0 else { return a1 }
+            return a0 + (a1 - a0) * (v0 - rmssd) / (v0 - v1)
+        }
+        return anchors[anchors.count - 1].0
+    }
+
     /// Sleep regularity (0–1) from a window of nightly sleep durations (hours): 1 − coefficient of
     /// variation, clamped. A rough but honest on-device proxy for the Sleep Regularity Index when we only
     /// have durations, not full timing. Fewer than 3 nights → nil (not enough to judge).

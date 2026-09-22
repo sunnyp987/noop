@@ -77,6 +77,10 @@ private struct HealthSectionsStack: View {
             // labeled category (never blended into the weekly headline) so "what does using ALL my data
             // say" is answerable without it silently overriding "what does THIS WEEK say".
             LifetimeSnapshotSection()
+            // Baseline Age: the original in-house multi-domain composite (cardio + HRV + sleep +
+            // training load + respiratory stability), transparently combined — Baseline's own answer to
+            // WHOOP's undisclosed Healthspan number, with every contributing domain visible.
+            BaselineAgeSection()
             // Training Load Balance (weekly Acute:Chronic Workload Ratio, StrandAnalytics
             // TrainingLoadEngine). Shown here UNCONDITIONALLY (not gated behind the opt-in "Your
             // cards" customiser) so a genuinely new metric isn't buried behind a discovery step —
@@ -1155,6 +1159,122 @@ private struct VitalitySection: View {
         vitalityWeekOf = vPts.last?.day
         bodyAge = (await repo.exploreSeries(key: "body_age", source: "my-whoop")).last?.value
         loaded = true
+    }
+}
+
+// MARK: - Baseline Age (original, in-house, multi-domain)
+
+/// "Baseline Age": BiometricAgeEngine's own original composite — cardiorespiratory (RHR + activity),
+/// autonomic (HRV vs an age-normative curve), sleep (duration + regularity), training-load balance, and
+/// respiratory stability, combined with a smooth saturating curve instead of a single linear formula.
+/// Distinct from "Fitness Age" above (which is the literal Nes/HUNT published equation) — this is
+/// Baseline's own construction, transparently: every domain's years-contribution is shown, unlike WHOOP's
+/// undisclosed Healthspan number.
+private struct BaselineAgeSection: View {
+    @EnvironmentObject var repo: Repository
+    @EnvironmentObject var profile: ProfileStore
+    @State private var trainingLoadRatio: Double?
+    @State private var loaded = false
+
+    private var result: BiometricAgeEngine.Result? {
+        let last7 = repo.days.suffix(7)
+        let rhrs = last7.compactMap { $0.restingHr }.map(Double.init)
+        let activeStrains = last7.compactMap { $0.strain }.filter { $0 >= 30 }
+        let meanActiveStrain = activeStrains.isEmpty ? 0 : activeStrains.reduce(0, +) / Double(activeStrains.count)
+        let pai = FitnessAgeEngine.physicalActivityIndexFromStrain(
+            activeDaysPerWeek: activeStrains.count, meanActiveStrain: meanActiveStrain)
+        let nights = last7.compactMap { $0.totalSleepMin }.map { Double($0) / 60.0 }.filter { $0 > 0 }
+        let hrvs = last7.compactMap { $0.avgHrv }
+        let resps = last7.compactMap { $0.respRateBpm }
+        let respCV: Double? = {
+            guard resps.count >= 3 else { return nil }
+            let mean = resps.reduce(0, +) / Double(resps.count)
+            guard mean > 0 else { return nil }
+            let variance = resps.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(resps.count)
+            return variance.squareRoot() / mean
+        }()
+        return BiometricAgeEngine.compute(.init(
+            chronoAge: Double(profile.age), sex: profile.sex,
+            restingHR: rhrs.isEmpty ? nil : IntelligenceEngine.medianOf(rhrs),
+            paIndex: pai,
+            rmssd: hrvs.isEmpty ? nil : IntelligenceEngine.medianOf(hrvs),
+            sleepHours: nights.isEmpty ? nil : nights.reduce(0, +) / Double(nights.count),
+            sleepNeedHours: nil,
+            sleepConsistency: VitalityEngine.sleepConsistency(nightlyHours: nights),
+            trainingLoadRatio: trainingLoadRatio,
+            respRateCV: respCV))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NoopMetrics.gap) {
+            SectionHeader("Baseline Age", overline: "In-house · Experimental",
+                          trailing: result != nil ? String(localized: "vs age \(profile.age)") : nil)
+            if let r = result {
+                hero(r)
+            } else if loaded {
+                ComingSoon(what: "A few more days across HRV, sleep and training and we can show your Baseline Age.", symbol: "atom")
+            } else {
+                ComingSoon(what: "Reading your Baseline Age…", symbol: "atom")
+            }
+        }
+        .task(id: repo.refreshSeq) { await load() }
+    }
+
+    private func load() async {
+        trainingLoadRatio = (await repo.exploreSeries(key: "training_load_ratio", source: "my-whoop")).last?.value
+        loaded = true
+    }
+
+    private func hero(_ r: BiometricAgeEngine.Result) -> some View {
+        let younger = r.deltaYears >= 0
+        let yrs = Int(abs(r.deltaYears).rounded())
+        let worst = r.contributions.last   // highest (most-aging) delta
+        let best = r.contributions.first   // lowest (most youth-favoring) delta
+        return VStack(alignment: .leading, spacing: NoopMetrics.space4) {
+            HStack(alignment: .center, spacing: NoopMetrics.space5) {
+                VStack(alignment: .leading, spacing: NoopMetrics.space1) {
+                    Text("Baseline Age").strandOverline()
+                    CountUpText(value: r.biometricAge, format: { "\(Int($0.rounded()))" },
+                                font: StrandFont.number(38), color: StrandPalette.textPrimary)
+                    Text(deltaLine(yrs: yrs, younger: younger))
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(younger ? StrandPalette.statusPositive : StrandPalette.statusWarning)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: NoopMetrics.space1) {
+                    Text("Domains used").strandOverline()
+                    Text("\(r.domainsUsed) of 5")
+                        .font(StrandFont.number(20)).foregroundStyle(StrandPalette.textPrimary)
+                }
+            }
+            Divider().overlay(StrandPalette.hairline)
+            if let best, best.deltaYears < 0 {
+                Text("Helping most: \(best.label)")
+                    .font(StrandFont.footnote).foregroundStyle(StrandPalette.statusPositive)
+            }
+            if let worst, worst.deltaYears > 0 {
+                Text("Holding you back: \(worst.label)")
+                    .font(StrandFont.footnote).foregroundStyle(StrandPalette.statusWarning)
+            }
+            Text("An original Baseline composite — cardio, HRV, sleep, training load and respiratory stability combined transparently. Not a clinical or medical estimate.")
+                .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
+        }
+        .padding(NoopMetrics.space5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            FrostedCardSurface(tint: StrandPalette.metricRose, cornerRadius: NoopMetrics.cardRadius)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+    }
+
+    private func deltaLine(yrs: Int, younger: Bool) -> String {
+        if yrs == 0 { return String(localized: "about your age") }
+        switch (younger, yrs == 1) {
+        case (true, true):   return String(localized: "1 yr younger")
+        case (true, false):  return String(localized: "\(yrs) yrs younger")
+        case (false, true):  return String(localized: "1 yr older")
+        case (false, false): return String(localized: "\(yrs) yrs older")
+        }
     }
 }
 

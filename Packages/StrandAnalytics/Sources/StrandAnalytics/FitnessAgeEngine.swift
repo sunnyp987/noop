@@ -72,6 +72,18 @@ public enum FitnessAgeEngine {
         return min(maxAge, max(minAge, fa))
     }
 
+    /// The SAME delta the Fitness Age formula produces, but UNCLAMPED and without the chronological-age
+    /// offset added — just "how many years younger(-)/older(+) than a reference peer your resting HR and
+    /// activity say you are". Used by BiometricAgeEngine, which combines this cardiorespiratory delta
+    /// with OTHER domains (HRV, sleep, training load) before applying its own single, smooth (non hard-
+    /// clamping) combination — clamping each domain separately, the way `fitnessAge` above does, would let
+    /// one extreme input (e.g. an unusually low RHR) alone swing the combined estimate to its floor, which
+    /// is exactly the "Fitness Age hit exactly 20" symptom this exists to avoid.
+    public static func rawCardioAgeDeltaYears(sex: String, restingHR: Double, paIndex: Double) -> Double {
+        let (_, ageC, _, rhrC, paiC) = coeffs(sex)
+        return (rhrC*(restingHR - restingHRReference) - paiC*(paIndex - paiReference)) / ageC
+    }
+
     /// Reconstruct the HUNT PA-index (0–15 = frequency×intensity×duration) from measured weekly
     /// aggregates. Bucket edges mirror the HUNT1 PA-Q response options (Kurtze 2008):
     ///   frequency ∈ {0.0, 0.5, 1.0, 2.5, 5.0}  ← active days in the last 7
