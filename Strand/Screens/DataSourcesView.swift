@@ -48,6 +48,10 @@ struct DataSourcesView: View {
     // here (a pure consumer of LiveState, isolated from the WHOOP/central path).
     @AppStorage(HrBroadcaster.defaultsKey) private var broadcastHrEnabled = false
 
+    // WHOOP Cloud Compare (personal validation tool, see WhoopCloudCompareView.swift's header):
+    // pushed from its own card below, same as any other source screen here.
+    @State private var showWhoopCloudCompare = false
+
     // The broadcaster's diagnostic sink forwards to THIS box, which `onAppear` points at the screen's
     // `live`. A reference box lets the `@StateObject` capture a stable target at init even though the
     // `@EnvironmentObject` `live` isn't available until the view runs — so the broadcast-out lifecycle
@@ -91,7 +95,11 @@ struct DataSourcesView: View {
                 wearableCard.staggeredAppear(index: 6)
                 broadcastHrCard.staggeredAppear(index: 7)
                 liveCard.staggeredAppear(index: 8)
+                whoopCloudCompareCard.staggeredAppear(index: 9)
             }
+        }
+        .navigationDestination(isPresented: $showWhoopCloudCompare) {
+            WhoopCloudCompareView()
         }
         .onAppear {
             // Point the broadcaster's diagnostic sink at this screen's `live` so its broadcast-out
@@ -816,6 +824,25 @@ struct DataSourcesView: View {
              status: StatePill(label, tone: tone, pulsing: live.connected && !live.bonded),
              subtitle: String(localized: "Pairs directly with your strap over Bluetooth: no WHOOP app, no cloud.")) {
             EmptyView()
+        }
+    }
+
+    /// Personal validation tool: WHOOP's own cloud numbers vs Baseline's own computed numbers for the
+    /// same days, via WHOOP's real OAuth API. Bring-your-own developer app credentials, same pattern
+    /// as every other source here. Not a WHOOP subscription requirement for the app generally — only
+    /// useful for as long as you personally keep a WHOOP subscription active.
+    private var whoopCloudCompareCard: some View {
+        let connected = WhoopCloudAuthStore.isConnected
+        return card(title: "WHOOP Cloud Compare", icon: "arrow.triangle.2.circlepath",
+             tint: StrandPalette.accent,
+             status: StatePill(connected ? "Connected" : "Not connected", tone: connected ? .positive : .neutral),
+             subtitle: "Compares WHOOP's own official numbers (via their real API) against Baseline's own computed numbers for the same days — recovery, HRV, strain, sleep. Needs a free developer app from developer.whoop.com; useful only while you have an active WHOOP subscription.") {
+            Button {
+                showWhoopCloudCompare = true
+            } label: {
+                Label(connected ? "Open" : "Set up", systemImage: "arrow.right.circle")
+            }
+            .buttonStyle(NoopButtonStyle(.primary))
         }
     }
 
