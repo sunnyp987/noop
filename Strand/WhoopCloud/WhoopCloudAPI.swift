@@ -102,6 +102,15 @@ enum WhoopCloudAPI {
 
     /// Ensures a valid access token, refreshing (and re-storing the rotated refresh token) if the
     /// current one has expired. Never prompts the user — this is the "auto-connect" path.
+    ///
+    /// A sync fires cycles/recoveries/sleep CONCURRENTLY (`async let` in WhoopCloudSyncScheduler), and
+    /// each independently calls this. If the access token happens to be expired right when a sync
+    /// starts, all three would otherwise race to refresh at once — but WHOOP rotates the refresh token
+    /// on every use, so only ONE of three simultaneous refresh calls can succeed; the other two get
+    /// rejected using an already-consumed token, and Swift's structured concurrency fails the WHOLE
+    /// sync the instant any one of the three throws. That surfaced as a single opaque server error for
+    /// the entire sync, even though one of the three silently succeeded underneath. `TokenRefreshGate`
+    /// coalesces concurrent callers onto a single in-flight refresh instead of racing.
     private static func validAccessToken() async throws -> String {
         guard WhoopCloudAuthStore.isConnected else { throw WhoopCloudError.notConnected }
 
@@ -110,6 +119,10 @@ enum WhoopCloudAPI {
             return token
         }
 
+        return try await TokenRefreshGate.shared.refreshedAccessToken()
+    }
+
+    fileprivate static func performTokenRefresh() async throws -> String {
         guard let refreshToken = WhoopCloudAuthStore.refreshToken,
               let clientId = WhoopCloudAuthStore.clientId, let clientSecret = WhoopCloudAuthStore.clientSecret else {
             throw WhoopCloudError.notConnected
@@ -227,6 +240,31 @@ enum WhoopCloudAPI {
             session.prefersEphemeralWebBrowserSession = false
             session.start()
         }
+    }
+}
+
+/// Coalesces concurrent token-refresh callers onto a single in-flight network request. Actor isolation
+/// serializes entry, so of any number of simultaneous callers, exactly one starts the real refresh and
+/// every other one just awaits that same in-flight Task's result — never sends a second refresh_token
+/// exchange that WHOOP would reject (it's already been rotated by the first).
+private actor TokenRefreshGate {
+    static let shared = TokenRefreshGate()
+    private var inFlight: Task<String, Error>?
+
+    func refreshedAccessToken() async throws -> String {
+        // Re-check the cache: another caller may have completed a refresh while we were waiting to
+        // enter this actor, in which case there's nothing left to do.
+        if let token = WhoopCloudAuthStore.accessToken, let expiry = WhoopCloudAuthStore.accessTokenExpiresAt,
+           expiry > Date() {
+            return token
+        }
+        if let task = inFlight {
+            return try await task.value
+        }
+        let task = Task { try await WhoopCloudAPI.performTokenRefresh() }
+        inFlight = task
+        defer { inFlight = nil }
+        return try await task.value
     }
 }
 
