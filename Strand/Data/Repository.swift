@@ -235,6 +235,11 @@ final class Repository: ObservableObject {
     func setStoreForTesting(_ s: WhoopStore) { self.store = s }
     #endif
 
+    /// The underlying `WhoopStore`, opening it if needed. A narrow escape hatch for the WHOOP Cloud
+    /// comparison tool (WhoopCloudCompareView), which needs to read `dailyMetrics` directly rather
+    /// than through one of the union/merge facades above.
+    func rawStoreHandle() async -> WhoopStore? { await ensureStore() }
+
     // MARK: - Union reads (active strap + canonical)
     //
     // Each helper reads the SAME store query across `importedReadIds` (active strap + canonical "my-whoop")

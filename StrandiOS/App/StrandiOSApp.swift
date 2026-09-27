@@ -46,6 +46,12 @@ struct StrandiOSApp: App {
         // never fires; the macOS timer, foreground catch-up, and "Run now" already work without it.
         ScheduledDebugExport.register()
         let model = AppModel()
+        // PRIVATE personal tool (see WhoopCloudCompareView.swift's header) — registers the BGTask
+        // handler the same way ScheduledDebugExport does, and wires the closures the background
+        // sync path needs to find the active device id and the metrics store.
+        WhoopCloudSyncScheduler.register(
+            deviceIdProvider: { [weak model] in model?.deviceRegistry?.activeDeviceId ?? model?.deviceId },
+            storeProvider: { [weak model] in await model?.repo.rawStoreHandle() })
         _model = StateObject(wrappedValue: model)
         _health = StateObject(wrappedValue: HealthKitBridge(
             repo: model.repo,

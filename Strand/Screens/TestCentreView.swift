@@ -43,6 +43,10 @@ struct TestCentreView: View {
     /// The strap model the user last picked, the same key SettingsView's showFiveMGControls gate reads.
     @AppStorage("selectedWhoopModel") private var selectedWhoopModelRaw = WhoopModel.whoop4.rawValue
 
+    /// Hidden door to the PRIVATE WHOOP Cloud comparison tool (see WhoopCloudCompareView.swift's
+    /// header) — a long-press on "ADVANCED", never a visible row, never mentioned outside this file.
+    @State private var showWhoopCloudCompare = false
+
     /// True when the connected strap is a 5/MG, so the 5/MG experimental block shows. Mirrors the
     /// SettingsView gate (#22): a confident 4.0 owner never sees controls that cannot touch their strap.
     private var is5MG: Bool { selectedWhoopModelRaw == WhoopModel.whoop5mg.rawValue }
@@ -68,6 +72,10 @@ struct TestCentreView: View {
         .onAppear {
             refreshToken &+= 1
             ScheduledDebugExport.activateIfEnabled()
+            WhoopCloudSyncScheduler.activateIfEnabled()
+        }
+        .navigationDestination(isPresented: $showWhoopCloudCompare) {
+            WhoopCloudCompareView()
         }
         .sheet(item: $report.pending) { _ in
             ReportReviewSheet(report: report)
@@ -231,6 +239,7 @@ struct TestCentreView: View {
                 Text("ADVANCED")
                     .font(StrandFont.overline).tracking(StrandFont.overlineTracking)
                     .foregroundStyle(StrandPalette.textSecondary)
+                    .onLongPressGesture(minimumDuration: 2) { showWhoopCloudCompare = true }
 
                 // Model-agnostic advanced toggles (shown on every strap), same @AppStorage keys as Settings.
                 Toggle(isOn: $experimentalSleepV2Enabled) {
