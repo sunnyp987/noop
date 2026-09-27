@@ -146,11 +146,25 @@ public enum WhoopCloudSyncScheduler {
 
         let computedId = deviceId + "-noop"
         let localRows = (try? await store.dailyMetrics(deviceId: computedId, from: fromDay, to: toDay)) ?? []
+        // Baseline's own "sleep_performance" (duration-vs-need composite) lives in the long-format
+        // metric series, NOT on the DailyMetric row — `row.efficiency` is a genuinely different WHOOP
+        // metric (time-asleep / time-in-bed) and comparing it against WHOOP's own
+        // sleep_performance_percentage would silently misreport a metric mismatch as a real
+        // discrepancy. See AnalyticsEngine.swift's Rest composite / WidgetPublish.swift's
+        // `exploreSeries(key: "sleep_performance", source: "my-whoop")` for the same series read
+        // through the full Repository merge; this is the raw-store equivalent since the scheduler
+        // only has a `WhoopStore` handle, not the full `Repository`.
+        let sleepPerfPoints = (try? await store.metricSeries(deviceId: computedId, key: "sleep_performance", from: fromDay, to: toDay)) ?? []
+        let sleepPerfByDay = Dictionary(sleepPerfPoints.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+
         var baselineDays: [String: BaselineDayValues] = [:]
         for row in localRows {
             baselineDays[row.day] = BaselineDayValues(
                 restingHr: row.restingHr.map(Double.init), hrv: row.avgHrv, recovery: row.recovery,
-                strain: row.strain, sleepPerformance: row.efficiency)
+                strain: row.strain, sleepPerformance: sleepPerfByDay[row.day])
+        }
+        for (day, perf) in sleepPerfByDay where baselineDays[day] == nil {
+            baselineDays[day] = BaselineDayValues(restingHr: nil, hrv: nil, recovery: nil, strain: nil, sleepPerformance: perf)
         }
 
         let report = WhoopCloudComparisonEngine.compare(baselineDays: baselineDays, cloudDays: cloudDays)

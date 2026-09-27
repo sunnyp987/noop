@@ -283,11 +283,20 @@ struct WhoopCloudCompareView: View {
 
             let computedId = deviceId + "-noop"
             let localRows = (try? await store.dailyMetrics(deviceId: computedId, from: fromDay, to: toDay)) ?? []
+            // Same fix as the live sync path (WhoopCloudSyncScheduler.performSync): Baseline's real
+            // "sleep_performance" composite lives in the metric series, not `row.efficiency` (a
+            // different WHOOP metric — sleep efficiency, not sleep performance).
+            let sleepPerfPoints = (try? await store.metricSeries(deviceId: computedId, key: "sleep_performance", from: fromDay, to: toDay)) ?? []
+            let sleepPerfByDay = Dictionary(sleepPerfPoints.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+
             var baselineDays: [String: BaselineDayValues] = [:]
             for row in localRows {
                 baselineDays[row.day] = BaselineDayValues(
                     restingHr: row.restingHr.map(Double.init), hrv: row.avgHrv, recovery: row.recovery,
-                    strain: row.strain, sleepPerformance: row.efficiency)
+                    strain: row.strain, sleepPerformance: sleepPerfByDay[row.day])
+            }
+            for (day, perf) in sleepPerfByDay where baselineDays[day] == nil {
+                baselineDays[day] = BaselineDayValues(restingHr: nil, hrv: nil, recovery: nil, strain: nil, sleepPerformance: perf)
             }
             historicalReport = WhoopCloudComparisonEngine.compare(baselineDays: baselineDays, cloudDays: cloudDays)
         } catch {
