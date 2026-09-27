@@ -87,15 +87,15 @@ struct DataSourcesView: View {
                        lazy: true) {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
                 whoopCard.staggeredAppear(index: 0)
-                appleHealthCard.staggeredAppear(index: 1)
-                xiaomiCard.staggeredAppear(index: 2)
-                nutritionCard.staggeredAppear(index: 3)
-                liftingCard.staggeredAppear(index: 4)
-                activityFileCard.staggeredAppear(index: 5)
-                wearableCard.staggeredAppear(index: 6)
-                broadcastHrCard.staggeredAppear(index: 7)
-                liveCard.staggeredAppear(index: 8)
-                whoopCloudCompareCard.staggeredAppear(index: 9)
+                whoopCloudCompareCard.staggeredAppear(index: 1)
+                appleHealthCard.staggeredAppear(index: 2)
+                xiaomiCard.staggeredAppear(index: 3)
+                nutritionCard.staggeredAppear(index: 4)
+                liftingCard.staggeredAppear(index: 5)
+                activityFileCard.staggeredAppear(index: 6)
+                wearableCard.staggeredAppear(index: 7)
+                broadcastHrCard.staggeredAppear(index: 8)
+                liveCard.staggeredAppear(index: 9)
             }
         }
         .navigationDestination(isPresented: $showWhoopCloudCompare) {
