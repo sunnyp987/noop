@@ -281,19 +281,31 @@ struct WhoopCloudCompareView: View {
             let cloudDays = try WhoopCloudCSVImport.parseCloudDays(fileAt: url)
             guard let fromDay = cloudDays.keys.min(), let toDay = cloudDays.keys.max() else { return }
 
-            let computedId = deviceId + "-noop"
-            let localRows = (try? await store.dailyMetrics(deviceId: computedId, from: fromDay, to: toDay)) ?? []
-            // Same fix as the live sync path (WhoopCloudSyncScheduler.performSync): Baseline's real
-            // "sleep_performance" composite lives in the metric series, not `row.efficiency` (a
-            // different WHOOP metric — sleep efficiency, not sleep performance).
-            let sleepPerfPoints = (try? await store.metricSeries(deviceId: computedId, key: "sleep_performance", from: fromDay, to: toDay)) ?? []
-            let sleepPerfByDay = Dictionary(sleepPerfPoints.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+            // Same fix as the live sync path (WhoopCloudSyncScheduler.performSync): a real strap's
+            // `deviceId` is "whoop-<uuid>", but the engine's computed rows always live under the
+            // canonical "my-whoop-noop" — union both so this doesn't come back empty for real installs.
+            // Also, Baseline's real "sleep_performance" composite lives in the metric series, not
+            // `row.efficiency` (a different WHOOP metric — sleep efficiency, not sleep performance).
+            let activeComputedId = deviceId + "-noop"
+            let canonicalComputedId = Repository.whoopSource + "-noop"
+            let computedIds = activeComputedId == canonicalComputedId ? [activeComputedId] : [activeComputedId, canonicalComputedId]
+
+            var localRowsByDay: [String: DailyMetric] = [:]
+            var sleepPerfByDay: [String: Double] = [:]
+            for id in computedIds {
+                for row in (try? await store.dailyMetrics(deviceId: id, from: fromDay, to: toDay)) ?? [] where localRowsByDay[row.day] == nil {
+                    localRowsByDay[row.day] = row
+                }
+                for point in (try? await store.metricSeries(deviceId: id, key: "sleep_performance", from: fromDay, to: toDay)) ?? [] where sleepPerfByDay[point.day] == nil {
+                    sleepPerfByDay[point.day] = point.value
+                }
+            }
 
             var baselineDays: [String: BaselineDayValues] = [:]
-            for row in localRows {
-                baselineDays[row.day] = BaselineDayValues(
+            for (day, row) in localRowsByDay {
+                baselineDays[day] = BaselineDayValues(
                     restingHr: row.restingHr.map(Double.init), hrv: row.avgHrv, recovery: row.recovery,
-                    strain: row.strain, sleepPerformance: sleepPerfByDay[row.day])
+                    strain: row.strain, sleepPerformance: sleepPerfByDay[day])
             }
             for (day, perf) in sleepPerfByDay where baselineDays[day] == nil {
                 baselineDays[day] = BaselineDayValues(restingHr: nil, hrv: nil, recovery: nil, strain: nil, sleepPerformance: perf)

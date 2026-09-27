@@ -144,24 +144,41 @@ public enum WhoopCloudSyncScheduler {
             return empty
         }
 
-        let computedId = deviceId + "-noop"
-        let localRows = (try? await store.dailyMetrics(deviceId: computedId, from: fromDay, to: toDay)) ?? []
-        // Baseline's own "sleep_performance" (duration-vs-need composite) lives in the long-format
-        // metric series, NOT on the DailyMetric row — `row.efficiency` is a genuinely different WHOOP
-        // metric (time-asleep / time-in-bed) and comparing it against WHOOP's own
-        // sleep_performance_percentage would silently misreport a metric mismatch as a real
-        // discrepancy. See AnalyticsEngine.swift's Rest composite / WidgetPublish.swift's
-        // `exploreSeries(key: "sleep_performance", source: "my-whoop")` for the same series read
-        // through the full Repository merge; this is the raw-store equivalent since the scheduler
-        // only has a `WhoopStore` handle, not the full `Repository`.
-        let sleepPerfPoints = (try? await store.metricSeries(deviceId: computedId, key: "sleep_performance", from: fromDay, to: toDay)) ?? []
-        let sleepPerfByDay = Dictionary(sleepPerfPoints.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
+        // IntelligenceEngine's computed write target NEVER follows the active strap — it stays
+        // permanently on the canonical "my-whoop" id so a remove/re-add never orphans history
+        // (Repository.swift's #814 union-model comment, IntelligenceEngine.swift:157-160). A real
+        // paired strap's `deviceId` is actually "whoop-<BLE-uuid>" (AddDeviceWizard.swift), so reading
+        // ONLY `deviceId + "-noop"` finds zero rows for virtually every real install — the sync
+        // reports success (WHOOP's cloud data came back fine) but the comparison is always empty.
+        // Union both ids, active strap first, exactly like Repository.unionComputedDailyMetrics.
+        let activeComputedId = deviceId + "-noop"
+        let canonicalComputedId = Repository.whoopSource + "-noop"
+        let computedIds = activeComputedId == canonicalComputedId ? [activeComputedId] : [activeComputedId, canonicalComputedId]
+
+        var localRowsByDay: [String: DailyMetric] = [:]
+        var sleepPerfByDay: [String: Double] = [:]
+        for id in computedIds {
+            for row in (try? await store.dailyMetrics(deviceId: id, from: fromDay, to: toDay)) ?? [] where localRowsByDay[row.day] == nil {
+                localRowsByDay[row.day] = row
+            }
+            // Baseline's own "sleep_performance" (duration-vs-need composite) lives in the long-format
+            // metric series, NOT on the DailyMetric row — `row.efficiency` is a genuinely different WHOOP
+            // metric (time-asleep / time-in-bed) and comparing it against WHOOP's own
+            // sleep_performance_percentage would silently misreport a metric mismatch as a real
+            // discrepancy. See AnalyticsEngine.swift's Rest composite / WidgetPublish.swift's
+            // `exploreSeries(key: "sleep_performance", source: "my-whoop")` for the same series read
+            // through the full Repository merge; this is the raw-store equivalent since the scheduler
+            // only has a `WhoopStore` handle, not the full `Repository`.
+            for point in (try? await store.metricSeries(deviceId: id, key: "sleep_performance", from: fromDay, to: toDay)) ?? [] where sleepPerfByDay[point.day] == nil {
+                sleepPerfByDay[point.day] = point.value
+            }
+        }
 
         var baselineDays: [String: BaselineDayValues] = [:]
-        for row in localRows {
-            baselineDays[row.day] = BaselineDayValues(
+        for (day, row) in localRowsByDay {
+            baselineDays[day] = BaselineDayValues(
                 restingHr: row.restingHr.map(Double.init), hrv: row.avgHrv, recovery: row.recovery,
-                strain: row.strain, sleepPerformance: sleepPerfByDay[row.day])
+                strain: row.strain, sleepPerformance: sleepPerfByDay[day])
         }
         for (day, perf) in sleepPerfByDay where baselineDays[day] == nil {
             baselineDays[day] = BaselineDayValues(restingHr: nil, hrv: nil, recovery: nil, strain: nil, sleepPerformance: perf)
