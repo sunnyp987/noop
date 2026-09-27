@@ -58,6 +58,13 @@ public struct WhoopCloudComparisonReport {
     public let metrics: [WhoopMetricComparison]
     public let days: [WhoopCloudDayComparison]
 
+    public init(windowStart: String, windowEnd: String, metrics: [WhoopMetricComparison], days: [WhoopCloudDayComparison]) {
+        self.windowStart = windowStart
+        self.windowEnd = windowEnd
+        self.metrics = metrics
+        self.days = days
+    }
+
     /// Human-readable one-liners the UI can render as-is, e.g. "HRV: Baseline reads 3.2ms lower
     /// than WHOOP on average" plus a note on which source is steadier day to day.
     public var summaryLines: [String] {
