@@ -24,6 +24,8 @@ struct WhoopCloudCompareView: View {
 
     @State private var clientId: String = WhoopCloudAuthStore.clientId ?? ""
     @State private var clientSecret: String = WhoopCloudAuthStore.clientSecret ?? ""
+    @State private var hasSavedCredentials = WhoopCloudAuthStore.clientId != nil && WhoopCloudAuthStore.clientSecret != nil
+    @State private var justSavedCredentials = false
     @State private var isConnected = WhoopCloudAuthStore.isConnected
     @State private var isBusy = false
     @State private var errorMessage: String?
@@ -115,12 +117,27 @@ struct WhoopCloudCompareView: View {
                 SecureField("Client Secret", text: $clientSecret)
                     .textFieldStyle(.roundedBorder)
 
-                Button("Save credentials") {
-                    WhoopCloudAuthStore.saveClientCredentials(id: clientId, secret: clientSecret)
+                HStack(spacing: NoopMetrics.space3) {
+                    Button("Save credentials") {
+                        WhoopCloudAuthStore.saveClientCredentials(id: clientId, secret: clientSecret)
+                        hasSavedCredentials = true
+                        justSavedCredentials = true
+                        Task {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                            justSavedCredentials = false
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(clientId.trimmingCharacters(in: .whitespaces).isEmpty ||
+                              clientSecret.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                    if justSavedCredentials {
+                        Label("Saved", systemImage: "checkmark.circle.fill")
+                            .font(StrandFont.caption).foregroundStyle(.green)
+                    } else if hasSavedCredentials {
+                        Text("Credentials on file").font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
+                    }
                 }
-                .buttonStyle(.bordered)
-                .disabled(clientId.trimmingCharacters(in: .whitespaces).isEmpty ||
-                          clientSecret.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
     }
@@ -156,7 +173,7 @@ struct WhoopCloudCompareView: View {
                         if isBusy { ProgressView() } else { Text("Connect to WHOOP") }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(isBusy || WhoopCloudAuthStore.clientId == nil || WhoopCloudAuthStore.clientSecret == nil)
+                    .disabled(isBusy || !hasSavedCredentials)
                 }
             }
         }
