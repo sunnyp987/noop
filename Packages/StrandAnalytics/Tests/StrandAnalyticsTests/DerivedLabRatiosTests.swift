@@ -43,8 +43,10 @@ final class DerivedLabRatiosTests: XCTestCase {
             "ast": input(30, "U/L"),
             "alt": input(20, "U/L"),
         ]
-        let r = DerivedLabRatios.compute(from: matched).first(where: { $0.key == "ast_alt_ratio" })
-        XCTAssertEqual(r?.value, 1.5, accuracy: 0.001)
+        guard let r = DerivedLabRatios.compute(from: matched).first(where: { $0.key == "ast_alt_ratio" }) else {
+            return XCTFail("expected ast_alt_ratio")
+        }
+        XCTAssertEqual(r.value, 1.5, accuracy: 0.001)
     }
 
     func testPlateletLymphocyteRatioNormalizesScaledCellCounts() {

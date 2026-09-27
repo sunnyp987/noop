@@ -20,7 +20,7 @@ import AppKit
 // URL scheme already registered in Info.plist, and — because we request `offline` scope and store
 // the rotating refresh_token — every sync after the FIRST login is silent. No re-auth prompt ever,
 // unless the user explicitly disconnects or WHOOP revokes access.
-public enum WhoopCloudAPI {
+enum WhoopCloudAPI {
 
     private static let authURL = "https://api.prod.whoop.com/oauth/oauth2/auth"
     private static let tokenURL = "https://api.prod.whoop.com/oauth/oauth2/token"
@@ -28,7 +28,7 @@ public enum WhoopCloudAPI {
     private static let redirectURI = "baseline-whoop://oauth/callback"
     private static let scopes = "offline read:recovery read:cycles read:sleep read:profile read:body_measurement"
 
-    public enum WhoopCloudError: LocalizedError {
+    enum WhoopCloudError: LocalizedError {
         case notConfigured
         case notConnected
         case authCancelled
@@ -36,7 +36,7 @@ public enum WhoopCloudAPI {
         case network(String)
         case server(Int, String)
 
-        public var errorDescription: String? {
+        var errorDescription: String? {
             switch self {
             case .notConfigured: return "Add your WHOOP Client ID and Secret first (from your own WHOOP Developer Dashboard app)."
             case .notConnected: return "Not connected to WHOOP yet — tap Connect."
@@ -53,7 +53,7 @@ public enum WhoopCloudAPI {
     /// Presents the WHOOP login sheet, exchanges the returned code for tokens, and stores them.
     /// After this completes once, `syncNow`-style calls never need to call this again.
     @MainActor
-    public static func connect() async throws {
+    static func connect() async throws {
         guard let clientId = WhoopCloudAuthStore.clientId, let clientSecret = WhoopCloudAuthStore.clientSecret,
               !clientId.isEmpty, !clientSecret.isEmpty else {
             throw WhoopCloudError.notConfigured
@@ -94,7 +94,7 @@ public enum WhoopCloudAPI {
         WhoopCloudAuthStore.saveTokens(access: token.accessToken, refresh: token.refreshToken, expiresIn: token.expiresIn)
     }
 
-    public static func disconnect() {
+    static func disconnect() {
         WhoopCloudAuthStore.disconnect()
     }
 
@@ -135,15 +135,15 @@ public enum WhoopCloudAPI {
 
     // MARK: - Data fetch
 
-    public static func recentCycles(days: Int) async throws -> [WhoopCloud.Cycle] {
+    static func recentCycles(days: Int) async throws -> [WhoopCloud.Cycle] {
         try await paginatedGet(path: "/cycle", days: days)
     }
 
-    public static func recentRecoveries(days: Int) async throws -> [WhoopCloud.Recovery] {
+    static func recentRecoveries(days: Int) async throws -> [WhoopCloud.Recovery] {
         try await paginatedGet(path: "/recovery", days: days)
     }
 
-    public static func recentSleep(days: Int) async throws -> [WhoopCloud.SleepActivity] {
+    static func recentSleep(days: Int) async throws -> [WhoopCloud.SleepActivity] {
         try await paginatedGet(path: "/activity/sleep", days: days)
     }
 
