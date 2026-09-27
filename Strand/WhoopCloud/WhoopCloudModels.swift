@@ -100,7 +100,9 @@ enum WhoopCloud {
     }
 
     struct SleepActivity: Decodable {
-        let id: Int
+        // WHOOP v2 uses a UUID string here (unlike Cycle/Recovery's integer ids) — decoding this as
+        // Int would silently fail every sleep fetch.
+        let id: String
         let start: String
         let end: String
         let nap: Bool
