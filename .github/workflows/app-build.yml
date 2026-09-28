@@ -73,12 +73,12 @@ jobs:
       - name: Build ${{ matrix.scheme }}
         run: |
           set -o pipefail
+          STATUS=0
           xcodebuild -scheme '${{ matrix.scheme }}' -configuration Debug \
             -destination '${{ matrix.destination }}' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            build 2>&1 | tee build.log
-          STATUS=$?
-          if [ $STATUS -ne 0 ]; then
+            build 2>&1 | tee build.log || STATUS=$?
+          if [ "$STATUS" -ne 0 ]; then
             {
               echo '### Build errors (${{ matrix.scheme }})'
               echo '```'
@@ -86,4 +86,4 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
-          exit $STATUS
+          exit "$STATUS"
