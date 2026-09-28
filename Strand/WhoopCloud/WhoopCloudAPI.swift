@@ -148,27 +148,31 @@ enum WhoopCloudAPI {
 
     // MARK: - Data fetch
 
-    static func recentCycles(days: Int) async throws -> [WhoopCloud.Cycle] {
+    /// `days` nil means no `start` filter at all — per WHOOP's docs, omitting `start` returns every
+    /// cycle/recovery/sleep record on file, not filtered by a minimum time. Used for the very first
+    /// sync ever, so it backfills full history instead of guessing at an arbitrary cutoff.
+    static func recentCycles(days: Int?) async throws -> [WhoopCloud.Cycle] {
         try await paginatedGet(path: "/cycle", days: days)
     }
 
-    static func recentRecoveries(days: Int) async throws -> [WhoopCloud.Recovery] {
+    static func recentRecoveries(days: Int?) async throws -> [WhoopCloud.Recovery] {
         try await paginatedGet(path: "/recovery", days: days)
     }
 
-    static func recentSleep(days: Int) async throws -> [WhoopCloud.SleepActivity] {
+    static func recentSleep(days: Int?) async throws -> [WhoopCloud.SleepActivity] {
         try await paginatedGet(path: "/activity/sleep", days: days)
     }
 
-    private static func paginatedGet<Record: Decodable>(path: String, days: Int) async throws -> [Record] {
+    private static func paginatedGet<Record: Decodable>(path: String, days: Int?) async throws -> [Record] {
         let accessToken = try await validAccessToken()
-        let start = ISO8601DateFormatter().string(from: Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date())
+        let start = days.map { ISO8601DateFormatter().string(from: Calendar.current.date(byAdding: .day, value: -$0, to: Date()) ?? Date()) }
 
         var all: [Record] = []
         var nextToken: String?
         repeat {
             var comps = URLComponents(string: apiBase + path)!
-            var items = [URLQueryItem(name: "limit", value: "25"), URLQueryItem(name: "start", value: start)]
+            var items = [URLQueryItem(name: "limit", value: "25")]
+            if let start { items.append(URLQueryItem(name: "start", value: start)) }
             if let nextToken { items.append(.init(name: "nextToken", value: nextToken)) }
             comps.queryItems = items
 
