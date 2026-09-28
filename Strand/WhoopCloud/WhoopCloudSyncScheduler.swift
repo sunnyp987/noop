@@ -130,7 +130,19 @@ public enum WhoopCloudSyncScheduler {
     // MARK: - The sync itself
 
     private static func performSync(deviceId: String, store: WhoopStore) async throws -> WhoopCloudComparisonReport {
-        let days = interval.days == 1 ? 3 : 10 // small overlap so a missed run still gets matched days
+        // Cover everything since the last successful sync, not just a fixed 3/10-day window — a long
+        // gap (app closed for weeks, a missed background run) or the very first sync ever would
+        // otherwise silently skip real history that's available on both sides. `minDays` is the floor
+        // (a small overlap so a slightly-late scheduled run still re-covers its own last window); a
+        // first-ever sync (no `lastRunAt`) pulls a full year so historical data isn't left out.
+        let minDays = interval.days == 1 ? 3 : 10
+        let days: Int
+        if let last = lastRunAt {
+            let elapsedDays = Int(Date().timeIntervalSince(last) / 86_400) + 2
+            days = max(minDays, elapsedDays)
+        } else {
+            days = 365
+        }
 
         async let cycles = WhoopCloudAPI.recentCycles(days: days)
         async let recoveries = WhoopCloudAPI.recentRecoveries(days: days)
