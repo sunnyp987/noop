@@ -197,11 +197,15 @@ public enum WhoopCloudSyncScheduler {
         withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let whole = ISO8601DateFormatter()
         whole.formatOptions = [.withInternetDateTime]
+        // Baseline's own DailyMetric.day is keyed by the DEVICE'S LOCAL calendar day (Repository.swift's
+        // `dayKeyFormatter` never sets `timeZone`, so it defaults to TimeZone.current) — forcing UTC
+        // here meant every night rolled to a different calendar date than Baseline's own row for
+        // anyone not literally in UTC, so days almost never matched even when both sides had real data
+        // for the same night. Match Baseline's convention: local time zone, no override.
         func dayKey(_ iso: String) -> String? {
             guard let date = withFractional.date(from: iso) ?? whole.date(from: iso) else { return nil }
             let f = DateFormatter()
             f.locale = Locale(identifier: "en_US_POSIX")
-            f.timeZone = TimeZone(identifier: "UTC")
             f.dateFormat = "yyyy-MM-dd"
             return f.string(from: date)
         }

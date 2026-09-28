@@ -28,8 +28,9 @@ public enum WhoopCloudCSVImport {
     }
 
     /// Parses a `physiological_cycles.csv` (from WHOOP's Settings -> "Get your data" export) into
-    /// per-day cloud values, keyed the same way the live API path keys them (the UTC calendar day of
-    /// the cycle's start time), so the two are drop-in compatible with `WhoopCloudComparisonEngine`.
+    /// per-day cloud values, keyed the same way the live API path keys them (the device's LOCAL
+    /// calendar day of the cycle's start time, matching Baseline's own DailyMetric.day convention),
+    /// so the two are drop-in compatible with `WhoopCloudComparisonEngine`.
     public static func parseCloudDays(csv: String) throws -> [String: CloudDayValues] {
         var lines = csv.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
         guard !lines.isEmpty else { throw ImportError.noHeader }
