@@ -238,20 +238,20 @@ public enum WhoopCloudSyncScheduler {
     /// the sleep's wake day — same day-ownership split `mergeCloudDays` already uses) and the
     /// immutable `DailyMetric` rows are built once, at the end.
     private struct DayAccum {
-        var totalSleepMin: Double?
-        var efficiency: Double?
-        var deepMin: Double?
-        var remMin: Double?
-        var lightMin: Double?
-        var disturbances: Int?
-        var restingHr: Int?
-        var avgHrv: Double?
-        var recovery: Double?
-        var strain: Double?
-        var spo2Pct: Double?
-        var skinTempDevC: Double?
-        var respRateBpm: Double?
-        var activeKcalEst: Double?
+        var totalSleepMin: Double? = nil
+        var efficiency: Double? = nil
+        var deepMin: Double? = nil
+        var remMin: Double? = nil
+        var lightMin: Double? = nil
+        var disturbances: Int? = nil
+        var restingHr: Int? = nil
+        var avgHrv: Double? = nil
+        var recovery: Double? = nil
+        var strain: Double? = nil
+        var spo2Pct: Double? = nil
+        var skinTempDevC: Double? = nil
+        var respRateBpm: Double? = nil
+        var activeKcalEst: Double? = nil
     }
 
     /// Maps WHOOP Cloud API records into the same `DailyMetric`/`MetricPoint` tables the manual CSV
