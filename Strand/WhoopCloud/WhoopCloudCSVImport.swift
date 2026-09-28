@@ -58,7 +58,8 @@ public enum WhoopCloudCSVImport {
         for line in lines {
             let cols = line.components(separatedBy: ",")
             guard cols.count > startIdx, let start = dayFormatter.date(from: cols[startIdx]) else { continue }
-            let day = dayKeyFormatter.string(from: start)
+            // Cycle start = sleep onset; +12h lands on the wake day Baseline files the day under.
+            let day = dayKeyFormatter.string(from: start.addingTimeInterval(12 * 3600))
 
             func double(_ idx: Int?) -> Double? {
                 guard let idx, cols.count > idx else { return nil }

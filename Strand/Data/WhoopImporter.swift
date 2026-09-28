@@ -20,7 +20,7 @@ enum WhoopImporter {
         for c in result.cycles {
             guard let start = c.cycleStart else { continue }
             metrics.append(DailyMetric(
-                day: dayString(start, tzOffsetMin: c.tzOffsetMin),
+                day: cycleDay(c, start: start),
                 totalSleepMin: c.asleepDurationMin,
                 efficiency: c.sleepEfficiencyPct,
                 deepMin: c.deepSleepDurationMin,
@@ -75,7 +75,7 @@ enum WhoopImporter {
         }
         for c in result.cycles {
             guard let start = c.cycleStart else { continue }
-            let day = dayString(start, tzOffsetMin: c.tzOffsetMin)
+            let day = cycleDay(c, start: start)
             add(day, "recovery", c.recoveryScore);        add(day, "strain", WhoopExportImporter.effortFromImportedDayStrain(c.dayStrain))
             add(day, "rhr", c.restingHeartRate);          add(day, "hrv", c.hrvMs)
             add(day, "spo2", c.bloodOxygenPct);           add(day, "skin_temp", c.skinTempCelsius)
@@ -109,7 +109,7 @@ enum WhoopImporter {
         for c in result.cycles {
             guard let start = c.cycleStart, let rhr = c.restingHeartRate, let hrv = c.hrvMs else { continue }
             let z = 0.6 * ((rhr - rm) / rs) - 0.6 * ((hrv - hm) / hs)
-            add(dayString(start, tzOffsetMin: c.tzOffsetMin), "stress", max(0, min(3, 1.5 + z)))
+            add(cycleDay(c, start: start), "stress", max(0, min(3, 1.5 + z)))
         }
         // Derived: daily HR-zone minutes + strength-activity time from workouts.
         var zoneByDay: [String: [Double]] = [:]
@@ -194,6 +194,12 @@ enum WhoopImporter {
         }
 
         return result.summary
+    }
+
+    /// A cycle starts at sleep onset (usually the evening before), but Baseline files a day's
+    /// recovery/strain/sleep under the WAKE day — use the cycle's wake time, else onset + 12h.
+    private static func cycleDay(_ c: WhoopCycleRow, start: Date) -> String {
+        dayString(c.wakeOnset ?? start.addingTimeInterval(12 * 3600), tzOffsetMin: c.tzOffsetMin)
     }
 
     /// Local-calendar day string for the cycle's own UTC offset.

@@ -31,7 +31,8 @@ public enum WhoopCloudSyncScheduler {
 
     // Bump when writeIntoRealStore's mapping changes: the next sync re-pulls ALL history so days
     // written by an older mapping get overwritten. v2 = strain stored on the 0–100 Effort scale.
-    private static let currentRealStoreVersion = 2
+    // v3 = cycles keyed by wake day instead of cycle-start day.
+    private static let currentRealStoreVersion = 3
 
     public static let bgTaskIdentifier = "com.noopapp.noop.whoopcloudsync"
 
@@ -229,7 +230,7 @@ public enum WhoopCloudSyncScheduler {
     // for the same night. Match Baseline's convention: local time zone, no override. Shared by the
     // diagnostic comparison (`mergeCloudDays`) and the real-store writer (`writeIntoRealStore`) so
     // both agree on exactly which calendar day owns a given cloud record.
-    private static func cloudDayKey(_ iso: String) -> String? {
+    private static func cloudDayKey(_ iso: String, shiftHours: Double = 0) -> String? {
         let withFractional = ISO8601DateFormatter()
         withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let whole = ISO8601DateFormatter()
@@ -238,7 +239,14 @@ public enum WhoopCloudSyncScheduler {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: date)
+        return f.string(from: date.addingTimeInterval(shiftHours * 3600))
+    }
+
+    /// A WHOOP cycle starts at sleep onset (usually the evening BEFORE the day it covers), but Baseline
+    /// files a day's recovery/strain/sleep under the WAKE day. Onset + 12h lands in the wake day for any
+    /// onset between ~12:00 and ~11:59 next day, so cycle-keyed values line up with wake-keyed sleep.
+    private static func cloudCycleDayKey(_ start: String) -> String? {
+        cloudDayKey(start, shiftHours: 12)
     }
 
     /// Per-day accumulator for the real-store write: `DailyMetric`'s fields are all `let`, so values
@@ -277,7 +285,7 @@ public enum WhoopCloudSyncScheduler {
         for r in recoveries where r.scoreState == "SCORED" { recoveryByCycleId[r.cycleId] = r }
 
         for c in cycles {
-            guard c.scoreState == "SCORED", let day = cloudDayKey(c.start) else { continue }
+            guard c.scoreState == "SCORED", let day = cloudCycleDayKey(c.start) else { continue }
             var a = accum[day] ?? DayAccum()
             let rec = recoveryByCycleId[c.id]?.score
             // WHOOP Day Strain (0–21) → Baseline's 0–100 Effort axis, same as the CSV importer.
@@ -373,14 +381,14 @@ public enum WhoopCloudSyncScheduler {
                                        sleeps: [WhoopCloud.SleepActivity]) -> [String: CloudDayValues] {
         var strainByDay: [String: Double] = [:]
         for c in cycles {
-            guard let day = cloudDayKey(c.start), c.scoreState == "SCORED", let strain = c.score?.strain else { continue }
+            guard let day = cloudCycleDayKey(c.start), c.scoreState == "SCORED", let strain = c.score?.strain else { continue }
             strainByDay[day] = strain * WhoopExportImporter.dayStrainToEffortScale
         }
 
         var recoveryByDay: [String: (recovery: Double?, hrv: Double?, rhr: Double?)] = [:]
-        let cycleStartById = Dictionary(uniqueKeysWithValues: cycles.map { ($0.id, $0.start) })
+        let cycleStartById = Dictionary(cycles.map { ($0.id, $0.start) }, uniquingKeysWith: { first, _ in first })
         for r in recoveries {
-            guard r.scoreState == "SCORED", let start = cycleStartById[r.cycleId], let day = cloudDayKey(start) else { continue }
+            guard r.scoreState == "SCORED", let start = cycleStartById[r.cycleId], let day = cloudCycleDayKey(start) else { continue }
             recoveryByDay[day] = (r.score?.recoveryScore, r.score?.hrvRmssdMilli, r.score?.restingHeartRate)
         }
 
