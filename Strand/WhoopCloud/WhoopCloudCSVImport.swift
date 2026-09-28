@@ -1,5 +1,6 @@
 import Foundation
 import StrandAnalytics
+import StrandImport
 
 // MARK: - WHOOP manual export ("Settings -> Download data") — one-time historical backfill
 //
@@ -66,7 +67,8 @@ public enum WhoopCloudCSVImport {
 
             result[day] = CloudDayValues(
                 restingHr: double(rhrIdx), hrv: double(hrvIdx), recovery: double(recoveryIdx),
-                strain: double(strainIdx), sleepPerformance: double(sleepPerfIdx))
+                strain: WhoopExportImporter.effortFromImportedDayStrain(double(strainIdx)),
+                sleepPerformance: double(sleepPerfIdx))
         }
         guard !result.isEmpty else { throw ImportError.noRows }
         return result

@@ -1,6 +1,7 @@
 import Foundation
 import WhoopStore
 import StrandAnalytics
+import StrandImport
 #if os(iOS)
 import BackgroundTasks
 #endif
@@ -25,7 +26,12 @@ public enum WhoopCloudSyncScheduler {
         static let interval = "whoopCloud.sync.interval"
         static let lastRunAt = "whoopCloud.sync.lastRunAt"
         static let lastReportSummary = "whoopCloud.sync.lastReportSummary"
+        static let realStoreVersion = "whoopCloud.sync.realStoreVersion"
     }
+
+    // Bump when writeIntoRealStore's mapping changes: the next sync re-pulls ALL history so days
+    // written by an older mapping get overwritten. v2 = strain stored on the 0–100 Effort scale.
+    private static let currentRealStoreVersion = 2
 
     public static let bgTaskIdentifier = "com.noopapp.noop.whoopcloudsync"
 
@@ -138,7 +144,8 @@ public enum WhoopCloudSyncScheduler {
         // file, not a guessed-at cutoff — so day one backfills whatever history actually exists.
         let minDays = interval.days == 1 ? 3 : 10
         let days: Int?
-        if let last = lastRunAt {
+        let realStoreUpToDate = UserDefaults.standard.integer(forKey: K.realStoreVersion) >= currentRealStoreVersion
+        if let last = lastRunAt, realStoreUpToDate {
             let elapsedDays = Int(Date().timeIntervalSince(last) / 86_400) + 2
             days = max(minDays, elapsedDays)
         } else {
@@ -159,6 +166,7 @@ public enum WhoopCloudSyncScheduler {
         // which the cloud API never exposes, so an imported day is never "what Baseline's algorithm
         // would have said" for that day — only WHOOP's.
         await writeIntoRealStore(store: store, cycles: cloudCycles, recoveries: cloudRecoveries, sleeps: cloudSleeps)
+        if days == nil { UserDefaults.standard.set(currentRealStoreVersion, forKey: K.realStoreVersion) }
 
         let cloudDays = mergeCloudDays(cycles: cloudCycles, recoveries: cloudRecoveries, sleeps: cloudSleeps)
         guard let fromDay = cloudDays.keys.min(), let toDay = cloudDays.keys.max() else {
@@ -272,7 +280,9 @@ public enum WhoopCloudSyncScheduler {
             guard c.scoreState == "SCORED", let day = cloudDayKey(c.start) else { continue }
             var a = accum[day] ?? DayAccum()
             let rec = recoveryByCycleId[c.id]?.score
-            a.strain = c.score?.strain
+            // WHOOP Day Strain (0–21) → Baseline's 0–100 Effort axis, same as the CSV importer.
+            let effort: Double? = WhoopExportImporter.effortFromImportedDayStrain(c.score?.strain)
+            a.strain = effort
             // WHOOP reports cycle energy in kilojoules; Baseline's activeKcalEst is kcal (1 kcal = 4.184 kJ).
             a.activeKcalEst = c.score?.kilojoule.map { $0 / 4.184 }
             if let rec {
@@ -286,7 +296,7 @@ public enum WhoopCloudSyncScheduler {
             }
             accum[day] = a
 
-            addPoint(day, "strain", c.score?.strain)
+            addPoint(day, "strain", effort)
             addPoint(day, "avg_hr", c.score?.averageHeartRate.map { Double($0) })
             addPoint(day, "max_hr", c.score?.maxHeartRate.map { Double($0) })
             addPoint(day, "energy_kcal", a.activeKcalEst)
@@ -364,7 +374,7 @@ public enum WhoopCloudSyncScheduler {
         var strainByDay: [String: Double] = [:]
         for c in cycles {
             guard let day = cloudDayKey(c.start), c.scoreState == "SCORED", let strain = c.score?.strain else { continue }
-            strainByDay[day] = strain
+            strainByDay[day] = strain * WhoopExportImporter.dayStrainToEffortScale
         }
 
         var recoveryByDay: [String: (recovery: Double?, hrv: Double?, rhr: Double?)] = [:]
