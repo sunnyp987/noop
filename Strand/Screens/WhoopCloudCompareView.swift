@@ -16,6 +16,13 @@ import WhoopStore
 // validate Baseline's algorithms, spot concrete discrepancies worth investigating, and judge which
 // source (official API vs Baseline's own BLE extraction) reads as the steadier day-to-day signal.
 //
+// Every sync ALSO writes the cloud numbers into Baseline's real store, under the same imported
+// source id the manual "WHOOP Export" CSV card uses (see `WhoopImporter.swift` /
+// `WhoopCloudSyncScheduler.writeIntoRealStore`), so Today/Trends/Sleep stay current without a
+// weekly manual re-export. This is still only ever WHOOP's OWN computed numbers, imported — it can
+// never retroactively produce what Baseline's own algorithm would have scored for a day, since that
+// needs the raw BLE stream, which the cloud API never exposes.
+//
 // BYO OAuth credentials: the user creates their own app in the WHOOP Developer Dashboard
 // (developer.whoop.com) and pastes its Client ID/Secret here, mirroring the AI Coach's "paste your
 // own key" pattern. Nothing is embedded in the app; nothing is shared with anyone else's install.
@@ -263,6 +270,11 @@ struct WhoopCloudCompareView: View {
             let result = try await WhoopCloudSyncScheduler.runNow(deviceId: deviceId, store: store)
             report = result
             reportLines = result.summaryLines
+            // The sync just wrote real DailyMetric/MetricPoint rows (writeIntoRealStore) — refresh
+            // Baseline's in-memory cache and re-run scoring now, same as a manual CSV import, so
+            // Today/Trends/Sleep reflect the new days without waiting on the next unrelated trigger.
+            await model.repo.refresh()
+            await model.intelligence.analyzeRecent()
         } catch {
             errorMessage = error.localizedDescription
         }

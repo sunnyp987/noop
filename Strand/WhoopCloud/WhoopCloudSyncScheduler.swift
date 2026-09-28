@@ -150,6 +150,16 @@ public enum WhoopCloudSyncScheduler {
         async let sleeps = WhoopCloudAPI.recentSleep(days: days)
         let (cloudCycles, cloudRecoveries, cloudSleeps) = try await (cycles, recoveries, sleeps)
 
+        // Write into Baseline's REAL store under the same imported source id the manual WHOOP CSV
+        // export uses (Repository.whoopSource, "my-whoop"), so cloud-synced days show up in
+        // Today/Trends/Sleep like an import always has, and a manual backfill + this ongoing sync
+        // merge into one continuous history (imported source wins per day over the "-noop" computed
+        // rows at read time, same as the CSV path). This can only ever persist WHOOP's OWN
+        // already-computed numbers: Baseline's own algorithm needs the raw continuous BLE stream,
+        // which the cloud API never exposes, so an imported day is never "what Baseline's algorithm
+        // would have said" for that day — only WHOOP's.
+        await writeIntoRealStore(store: store, cycles: cloudCycles, recoveries: cloudRecoveries, sleeps: cloudSleeps)
+
         let cloudDays = mergeCloudDays(cycles: cloudCycles, recoveries: cloudRecoveries, sleeps: cloudSleeps)
         guard let fromDay = cloudDays.keys.min(), let toDay = cloudDays.keys.max() else {
             let empty = WhoopCloudComparisonReport(windowStart: "", windowEnd: "", metrics: [], days: [])
@@ -202,43 +212,163 @@ public enum WhoopCloudSyncScheduler {
         return report
     }
 
-    private static func mergeCloudDays(cycles: [WhoopCloud.Cycle], recoveries: [WhoopCloud.Recovery],
-                                       sleeps: [WhoopCloud.SleepActivity]) -> [String: CloudDayValues] {
-        // WHOOP's v2 timestamps carry fractional seconds (e.g. "2026-07-28T00:29:59.000Z"), which the
-        // default ISO8601DateFormatter options silently fail to parse, so BOTH variants are tried.
+    // WHOOP's v2 timestamps carry fractional seconds (e.g. "2026-07-28T00:29:59.000Z"), which the
+    // default ISO8601DateFormatter options silently fail to parse, so BOTH variants are tried.
+    // Baseline's own DailyMetric.day is keyed by the DEVICE'S LOCAL calendar day (Repository.swift's
+    // `dayKeyFormatter` never sets `timeZone`, so it defaults to TimeZone.current) — forcing UTC
+    // here meant every night rolled to a different calendar date than Baseline's own row for
+    // anyone not literally in UTC, so days almost never matched even when both sides had real data
+    // for the same night. Match Baseline's convention: local time zone, no override. Shared by the
+    // diagnostic comparison (`mergeCloudDays`) and the real-store writer (`writeIntoRealStore`) so
+    // both agree on exactly which calendar day owns a given cloud record.
+    private static func cloudDayKey(_ iso: String) -> String? {
         let withFractional = ISO8601DateFormatter()
         withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let whole = ISO8601DateFormatter()
         whole.formatOptions = [.withInternetDateTime]
-        // Baseline's own DailyMetric.day is keyed by the DEVICE'S LOCAL calendar day (Repository.swift's
-        // `dayKeyFormatter` never sets `timeZone`, so it defaults to TimeZone.current) — forcing UTC
-        // here meant every night rolled to a different calendar date than Baseline's own row for
-        // anyone not literally in UTC, so days almost never matched even when both sides had real data
-        // for the same night. Match Baseline's convention: local time zone, no override.
-        func dayKey(_ iso: String) -> String? {
-            guard let date = withFractional.date(from: iso) ?? whole.date(from: iso) else { return nil }
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "en_US_POSIX")
-            f.dateFormat = "yyyy-MM-dd"
-            return f.string(from: date)
+        guard let date = withFractional.date(from: iso) ?? whole.date(from: iso) else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
+    }
+
+    /// Per-day accumulator for the real-store write: `DailyMetric`'s fields are all `let`, so values
+    /// are gathered here (cycle/recovery fields keyed by the cycle's start day, sleep fields keyed by
+    /// the sleep's wake day — same day-ownership split `mergeCloudDays` already uses) and the
+    /// immutable `DailyMetric` rows are built once, at the end.
+    private struct DayAccum {
+        var totalSleepMin: Double?
+        var efficiency: Double?
+        var deepMin: Double?
+        var remMin: Double?
+        var lightMin: Double?
+        var disturbances: Int?
+        var restingHr: Int?
+        var avgHrv: Double?
+        var recovery: Double?
+        var strain: Double?
+        var spo2Pct: Double?
+        var skinTempDevC: Double?
+        var respRateBpm: Double?
+        var activeKcalEst: Double?
+    }
+
+    /// Maps WHOOP Cloud API records into the same `DailyMetric`/`MetricPoint` tables the manual CSV
+    /// importer writes (`WhoopImporter.swift`), under the same imported source id, so cloud-synced
+    /// history is indistinguishable from an import to every other screen in the app.
+    private static func writeIntoRealStore(store: WhoopStore, cycles: [WhoopCloud.Cycle],
+                                           recoveries: [WhoopCloud.Recovery], sleeps: [WhoopCloud.SleepActivity]) async {
+        var accum: [String: DayAccum] = [:]
+        var points: [MetricPoint] = []
+        func addPoint(_ day: String, _ key: String, _ v: Double?) {
+            if let v { points.append(MetricPoint(day: day, key: key, value: v)) }
         }
 
+        var recoveryByCycleId: [Int: WhoopCloud.Recovery] = [:]
+        for r in recoveries where r.scoreState == "SCORED" { recoveryByCycleId[r.cycleId] = r }
+
+        for c in cycles {
+            guard c.scoreState == "SCORED", let day = cloudDayKey(c.start) else { continue }
+            var a = accum[day] ?? DayAccum()
+            let rec = recoveryByCycleId[c.id]?.score
+            a.strain = c.score?.strain
+            // WHOOP reports cycle energy in kilojoules; Baseline's activeKcalEst is kcal (1 kcal = 4.184 kJ).
+            a.activeKcalEst = c.score?.kilojoule.map { $0 / 4.184 }
+            if let rec {
+                a.restingHr = rec.restingHeartRate.map { Int($0.rounded()) }
+                a.avgHrv = rec.hrvRmssdMilli
+                a.recovery = rec.recoveryScore
+                a.spo2Pct = rec.spo2Percentage
+                // NOTE: WHOOP's cloud skin_temp_celsius is an absolute reading, not a baseline
+                // deviation — same caveat as the CSV importer's skinTempDevC mapping.
+                a.skinTempDevC = rec.skinTempCelsius
+            }
+            accum[day] = a
+
+            addPoint(day, "strain", c.score?.strain)
+            addPoint(day, "avg_hr", c.score?.averageHeartRate.map(Double.init))
+            addPoint(day, "max_hr", c.score?.maxHeartRate.map(Double.init))
+            addPoint(day, "energy_kcal", a.activeKcalEst)
+            addPoint(day, "recovery", rec?.recoveryScore)
+            addPoint(day, "rhr", rec?.restingHeartRate)
+            addPoint(day, "hrv", rec?.hrvRmssdMilli)
+            addPoint(day, "spo2", rec?.spo2Percentage)
+            addPoint(day, "skin_temp", rec?.skinTempCelsius)
+        }
+
+        for s in sleeps where !s.nap {
+            guard s.scoreState == "SCORED", let day = cloudDayKey(s.end), let score = s.score else { continue }
+            var a = accum[day] ?? DayAccum()
+            let stage = score.stageSummary
+            let deepMin = stage?.totalSlowWaveSleepTimeMilli.map { $0 / 60_000 }
+            let remMin = stage?.totalRemSleepTimeMilli.map { $0 / 60_000 }
+            let lightMin = stage?.totalLightSleepTimeMilli.map { $0 / 60_000 }
+            let awakeMin = stage?.totalAwakeTimeMilli.map { $0 / 60_000 }
+            let totalSleepMin = [deepMin, remMin, lightMin].compactMap { $0 }.reduce(0, +)
+
+            a.totalSleepMin = totalSleepMin > 0 ? totalSleepMin : a.totalSleepMin
+            a.efficiency = score.sleepEfficiencyPercentage ?? a.efficiency
+            a.deepMin = deepMin ?? a.deepMin
+            a.remMin = remMin ?? a.remMin
+            a.lightMin = lightMin ?? a.lightMin
+            a.disturbances = stage?.disturbanceCount ?? a.disturbances
+            a.respRateBpm = score.respiratoryRate ?? a.respRateBpm
+            accum[day] = a
+
+            addPoint(day, "sleep_total_min", totalSleepMin > 0 ? totalSleepMin : nil)
+            addPoint(day, "sleep_deep_min", deepMin); addPoint(day, "sleep_rem_min", remMin)
+            addPoint(day, "sleep_light_min", lightMin); addPoint(day, "awake_min", awakeMin)
+            if let inBed = stage?.totalInBedTimeMilli { addPoint(day, "in_bed_min", inBed / 60_000) }
+            addPoint(day, "resp_rate", score.respiratoryRate)
+            addPoint(day, "sleep_efficiency", score.sleepEfficiencyPercentage)
+            addPoint(day, "sleep_performance", score.sleepPerformancePercentage)
+            addPoint(day, "sleep_consistency", score.sleepConsistencyPercentage)
+            if let need = score.sleepNeeded {
+                let needMin = ((need.baselineMilli ?? 0) + (need.needFromSleepDebtMilli ?? 0)
+                    + (need.needFromRecentStrainMilli ?? 0) + (need.needFromRecentNapMilli ?? 0)) / 60_000
+                if needMin > 0 {
+                    addPoint(day, "sleep_need_min", needMin)
+                    if totalSleepMin > 0 { addPoint(day, "hours_vs_needed_pct", totalSleepMin / needMin * 100) }
+                }
+            }
+            if let deep = deepMin, let rem = remMin {
+                addPoint(day, "restorative_min", deep + rem)
+                if totalSleepMin > 0 { addPoint(day, "restorative_pct", (deep + rem) / totalSleepMin * 100) }
+            }
+        }
+
+        guard !accum.isEmpty else { return }
+        let metrics = accum.map { day, a in
+            DailyMetric(day: day, totalSleepMin: a.totalSleepMin, efficiency: a.efficiency, deepMin: a.deepMin,
+                        remMin: a.remMin, lightMin: a.lightMin, disturbances: a.disturbances, restingHr: a.restingHr,
+                        avgHrv: a.avgHrv, recovery: a.recovery, strain: a.strain, exerciseCount: nil,
+                        spo2Pct: a.spo2Pct, skinTempDevC: a.skinTempDevC, respRateBpm: a.respRateBpm,
+                        steps: nil, activeKcalEst: a.activeKcalEst)
+        }
+        let importedId = Repository.whoopSource
+        _ = try? await store.upsertDailyMetrics(metrics, deviceId: importedId)
+        try? await store.upsertMetricSeries(points, deviceId: importedId)
+    }
+
+    private static func mergeCloudDays(cycles: [WhoopCloud.Cycle], recoveries: [WhoopCloud.Recovery],
+                                       sleeps: [WhoopCloud.SleepActivity]) -> [String: CloudDayValues] {
         var strainByDay: [String: Double] = [:]
         for c in cycles {
-            guard let day = dayKey(c.start), c.scoreState == "SCORED", let strain = c.score?.strain else { continue }
+            guard let day = cloudDayKey(c.start), c.scoreState == "SCORED", let strain = c.score?.strain else { continue }
             strainByDay[day] = strain
         }
 
         var recoveryByDay: [String: (recovery: Double?, hrv: Double?, rhr: Double?)] = [:]
         let cycleStartById = Dictionary(uniqueKeysWithValues: cycles.map { ($0.id, $0.start) })
         for r in recoveries {
-            guard r.scoreState == "SCORED", let start = cycleStartById[r.cycleId], let day = dayKey(start) else { continue }
+            guard r.scoreState == "SCORED", let start = cycleStartById[r.cycleId], let day = cloudDayKey(start) else { continue }
             recoveryByDay[day] = (r.score?.recoveryScore, r.score?.hrvRmssdMilli, r.score?.restingHeartRate)
         }
 
         var sleepByDay: [String: Double] = [:]
         for s in sleeps where !s.nap {
-            guard let day = dayKey(s.end), s.scoreState == "SCORED",
+            guard let day = cloudDayKey(s.end), s.scoreState == "SCORED",
                   let perf = s.score?.sleepPerformancePercentage else { continue }
             sleepByDay[day] = perf
         }

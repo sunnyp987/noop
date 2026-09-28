@@ -31,11 +31,12 @@ enum WhoopCloud {
 
     struct CycleScore: Decodable {
         let strain: Double?
+        let kilojoule: Double?
         let averageHeartRate: Int?
         let maxHeartRate: Int?
 
         enum CodingKeys: String, CodingKey {
-            case strain
+            case strain, kilojoule
             case averageHeartRate = "average_heart_rate"
             case maxHeartRate = "max_heart_rate"
         }
@@ -85,17 +86,53 @@ enum WhoopCloud {
         }
     }
 
+    struct SleepStageSummary: Decodable {
+        let totalInBedTimeMilli: Double?
+        let totalAwakeTimeMilli: Double?
+        let totalLightSleepTimeMilli: Double?
+        let totalSlowWaveSleepTimeMilli: Double?
+        let totalRemSleepTimeMilli: Double?
+        let disturbanceCount: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case totalInBedTimeMilli = "total_in_bed_time_milli"
+            case totalAwakeTimeMilli = "total_awake_time_milli"
+            case totalLightSleepTimeMilli = "total_light_sleep_time_milli"
+            case totalSlowWaveSleepTimeMilli = "total_slow_wave_sleep_time_milli"
+            case totalRemSleepTimeMilli = "total_rem_sleep_time_milli"
+            case disturbanceCount = "disturbance_count"
+        }
+    }
+
+    struct SleepNeeded: Decodable {
+        let baselineMilli: Double?
+        let needFromSleepDebtMilli: Double?
+        let needFromRecentStrainMilli: Double?
+        let needFromRecentNapMilli: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case baselineMilli = "baseline_milli"
+            case needFromSleepDebtMilli = "need_from_sleep_debt_milli"
+            case needFromRecentStrainMilli = "need_from_recent_strain_milli"
+            case needFromRecentNapMilli = "need_from_recent_nap_milli"
+        }
+    }
+
     struct SleepScore: Decodable {
         let respiratoryRate: Double?
         let sleepPerformancePercentage: Double?
         let sleepConsistencyPercentage: Double?
         let sleepEfficiencyPercentage: Double?
+        let stageSummary: SleepStageSummary?
+        let sleepNeeded: SleepNeeded?
 
         enum CodingKeys: String, CodingKey {
             case respiratoryRate = "respiratory_rate"
             case sleepPerformancePercentage = "sleep_performance_percentage"
             case sleepConsistencyPercentage = "sleep_consistency_percentage"
             case sleepEfficiencyPercentage = "sleep_efficiency_percentage"
+            case stageSummary = "stage_summary"
+            case sleepNeeded = "sleep_needed"
         }
     }
 
