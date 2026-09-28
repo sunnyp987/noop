@@ -83,6 +83,8 @@ jobs:
               echo '### Build errors (${{ matrix.scheme }})'
               echo '```'
               grep -E 'error:' build.log | sort -u | head -n 50
+              echo '--- last 80 lines of build.log (no "error:" match above means look here) ---'
+              tail -n 80 build.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
