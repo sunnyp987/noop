@@ -287,8 +287,8 @@ public enum WhoopCloudSyncScheduler {
             accum[day] = a
 
             addPoint(day, "strain", c.score?.strain)
-            addPoint(day, "avg_hr", c.score?.averageHeartRate.map(Double.init))
-            addPoint(day, "max_hr", c.score?.maxHeartRate.map(Double.init))
+            addPoint(day, "avg_hr", c.score?.averageHeartRate.map { Double($0) })
+            addPoint(day, "max_hr", c.score?.maxHeartRate.map { Double($0) })
             addPoint(day, "energy_kcal", a.activeKcalEst)
             addPoint(day, "recovery", rec?.recoveryScore)
             addPoint(day, "rhr", rec?.restingHeartRate)
@@ -305,7 +305,8 @@ public enum WhoopCloudSyncScheduler {
             let remMin = stage?.totalRemSleepTimeMilli.map { $0 / 60_000 }
             let lightMin = stage?.totalLightSleepTimeMilli.map { $0 / 60_000 }
             let awakeMin = stage?.totalAwakeTimeMilli.map { $0 / 60_000 }
-            let totalSleepMin = [deepMin, remMin, lightMin].compactMap { $0 }.reduce(0, +)
+            let stageMins: [Double] = [deepMin, remMin, lightMin].compactMap { $0 }
+            let totalSleepMin: Double = stageMins.reduce(0, +)
 
             a.totalSleepMin = totalSleepMin > 0 ? totalSleepMin : a.totalSleepMin
             a.efficiency = score.sleepEfficiencyPercentage ?? a.efficiency
@@ -325,8 +326,14 @@ public enum WhoopCloudSyncScheduler {
             addPoint(day, "sleep_performance", score.sleepPerformancePercentage)
             addPoint(day, "sleep_consistency", score.sleepConsistencyPercentage)
             if let need = score.sleepNeeded {
-                let needMin = ((need.baselineMilli ?? 0) + (need.needFromSleepDebtMilli ?? 0)
-                    + (need.needFromRecentStrainMilli ?? 0) + (need.needFromRecentNapMilli ?? 0)) / 60_000
+                // Broken into separate statements: the single chained-?? expression this replaced made
+                // the type checker time out ("unable to type-check this expression in reasonable time").
+                let baseline: Double = need.baselineMilli ?? 0
+                let fromDebt: Double = need.needFromSleepDebtMilli ?? 0
+                let fromStrain: Double = need.needFromRecentStrainMilli ?? 0
+                let fromNap: Double = need.needFromRecentNapMilli ?? 0
+                let needMilli: Double = baseline + fromDebt + fromStrain + fromNap
+                let needMin = needMilli / 60_000
                 if needMin > 0 {
                     addPoint(day, "sleep_need_min", needMin)
                     if totalSleepMin > 0 { addPoint(day, "hours_vs_needed_pct", totalSleepMin / needMin * 100) }
@@ -349,7 +356,7 @@ public enum WhoopCloudSyncScheduler {
         }
         let importedId = Repository.whoopSource
         _ = try? await store.upsertDailyMetrics(metrics, deviceId: importedId)
-        try? await store.upsertMetricSeries(points, deviceId: importedId)
+        _ = try? await store.upsertMetricSeries(points, deviceId: importedId)
     }
 
     private static func mergeCloudDays(cycles: [WhoopCloud.Cycle], recoveries: [WhoopCloud.Recovery],
