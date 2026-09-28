@@ -339,12 +339,13 @@ public enum WhoopCloudSyncScheduler {
         }
 
         guard !accum.isEmpty else { return }
-        let metrics = accum.map { day, a in
-            DailyMetric(day: day, totalSleepMin: a.totalSleepMin, efficiency: a.efficiency, deepMin: a.deepMin,
-                        remMin: a.remMin, lightMin: a.lightMin, disturbances: a.disturbances, restingHr: a.restingHr,
-                        avgHrv: a.avgHrv, recovery: a.recovery, strain: a.strain, exerciseCount: nil,
-                        spo2Pct: a.spo2Pct, skinTempDevC: a.skinTempDevC, respRateBpm: a.respRateBpm,
-                        steps: nil, activeKcalEst: a.activeKcalEst)
+        var metrics: [DailyMetric] = []
+        for (day, a) in accum {
+            metrics.append(DailyMetric(day: day, totalSleepMin: a.totalSleepMin, efficiency: a.efficiency, deepMin: a.deepMin,
+                                        remMin: a.remMin, lightMin: a.lightMin, disturbances: a.disturbances, restingHr: a.restingHr,
+                                        avgHrv: a.avgHrv, recovery: a.recovery, strain: a.strain, exerciseCount: nil,
+                                        spo2Pct: a.spo2Pct, skinTempDevC: a.skinTempDevC, respRateBpm: a.respRateBpm,
+                                        steps: nil, activeKcalEst: a.activeKcalEst))
         }
         let importedId = Repository.whoopSource
         _ = try? await store.upsertDailyMetrics(metrics, deviceId: importedId)
